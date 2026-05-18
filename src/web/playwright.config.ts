@@ -6,7 +6,7 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   retries: process.env.CI ? 1 : 0,
   use: {
-    baseURL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000',
+    baseURL: 'http://localhost:3000',
     actionTimeout: 30_000,
     navigationTimeout: 60_000,
   },
@@ -17,11 +17,10 @@ export default defineConfig({
     ['html', { outputFolder: 'playwright-report' }],
     ...(process.env.CI ? [['github' as const]] : []),
   ],
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: 'npm run dev',
-        url: 'http://localhost:3000',
-        reuseExistingServer: true,
-      },
+  webServer: {
+    command: process.env.CI ? 'npm run build && npm start' : 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });

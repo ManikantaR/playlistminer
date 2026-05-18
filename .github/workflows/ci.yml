@@ -115,28 +115,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dotnet-build-and-test, frontend-build-and-test]
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: playlistminer_e2e
-          POSTGRES_USER: pmuser
-          POSTGRES_PASSWORD: testpassword
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    defaults:
+      run:
+        working-directory: src/web
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -145,34 +129,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: src/web/package-lock.json
 
-      - name: Enable pg_trgm
-        run: |
-          PGPASSWORD=testpassword psql -h localhost -U pmuser -d playlistminer_e2e -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
-
-      - name: Build and start API
-        run: |
-          dotnet build PlaylistMiner.slnx --configuration Release
-          dotnet run --project src/PlaylistMiner.Api --configuration Release &
-        env:
-          ConnectionStrings__Default: "Host=localhost;Port=5432;Database=playlistminer_e2e;Username=pmuser;Password=testpassword"
-          ASPNETCORE_URLS: "http://localhost:5000"
-
-      - name: Wait for API
-        run: |
-          until curl -sf http://localhost:5000/health; do
-            sleep 2
-          done
-
-      - name: Install frontend dependencies
-        working-directory: src/web
+      - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright browsers
-        working-directory: src/web
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright E2E tests
-        working-directory: src/web
         run: npx playwright test
         env:
           NEXT_PUBLIC_API_URL: http://localhost:5000
