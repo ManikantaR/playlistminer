@@ -12,6 +12,34 @@ namespace PlaylistMiner.Infrastructure;
 
 public static class InfrastructureServiceExtensions
 {
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddYouTubeIntegration(configuration);
+        services.AddCategorizationEngine(configuration);
+        services.AddRepositories();
+        services.AddApplicationServices();
+        return services;
+    }
+
+    public static IServiceCollection AddRepositories(this IServiceCollection services)
+    {
+        services.AddScoped<IVideoRepository, VideoRepository>();
+        services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<IPlaylistRepository, PlaylistRepository>();
+        services.AddScoped<IUndoRepository, UndoRepository>();
+        return services;
+    }
+
+    public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+    {
+        services.AddScoped<IVideoService, VideoService>();
+        services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
+        services.AddScoped<IImportService, ImportService>();
+        return services;
+    }
+
     public static IServiceCollection AddYouTubeIntegration(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -62,6 +90,23 @@ public static class InfrastructureServiceExtensions
             client.BaseAddress = new Uri(opts.OllamaBaseUrl);
             client.Timeout = TimeSpan.FromSeconds(35);
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers backup, sync-trigger, and process-runner services (all repos + categorization
+    /// are expected to be registered via <see cref="AddInfrastructure"/> or separately).
+    /// </summary>
+    public static IServiceCollection AddInfrastructureServices(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddCategorizationEngine(configuration);
+
+        services.AddScoped<ISyncTrigger, SyncTriggerService>();
+        services.AddScoped<IBackupService, BackupService>();
+        services.AddScoped<IProcessRunner, ProcessRunner>();
 
         return services;
     }

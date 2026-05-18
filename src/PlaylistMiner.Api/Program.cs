@@ -6,21 +6,25 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.AddNpgsqlDbContext<PlaylistMinerDbContext>("playlistminer");
 
-// Add services to the container.
 builder.Services.AddOpenApi();
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+    p.WithOrigins("http://localhost:3000").AllowAnyMethod().AllowAnyHeader()));
+builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
-builder.Services.AddYouTubeIntegration(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
+app.UseExceptionHandler();
+app.UseCors();
 app.MapDefaultEndpoints();
 app.MapControllers();
 
 app.Run();
 
+public partial class Program { }

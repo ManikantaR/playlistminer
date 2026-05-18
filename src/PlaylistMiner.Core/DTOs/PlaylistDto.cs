@@ -5,4 +5,5 @@ public record PlaylistDto(
     string Name,
     string? Description,
     bool IsInbox,
-    int ItemCount);
+    int ItemCount,
+    int Id = 0);
