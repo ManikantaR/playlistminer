@@ -1,6 +1,9 @@
+using PlaylistMiner.Infrastructure.Data;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddNpgsqlDbContext<PlaylistMinerDbContext>("playlistminer");
 
 // Add services to the container.
 builder.Services.AddOpenApi();
