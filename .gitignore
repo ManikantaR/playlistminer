@@ -39,3 +39,4 @@ playwright-report/
 # Build
 publish/
 dist/
+*.tsbuildinfo
