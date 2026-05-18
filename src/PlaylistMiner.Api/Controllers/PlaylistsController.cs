@@ -29,7 +29,7 @@ public class PlaylistsController(
         var now = DateTime.UtcNow;
         var playlist = await playlistRepository.CreateAsync(new Playlist
         {
-            YouTubeId = Guid.NewGuid().ToString("N")[..50],
+            YouTubeId = Guid.NewGuid().ToString("N")[..32], // "N" format GUID = 32 hex chars
             Name = request.Title,
             Description = request.Description,
             CreatedAt = now,
@@ -37,7 +37,7 @@ public class PlaylistsController(
         }, ct);
 
         var dto = new PlaylistDto(playlist.YouTubeId, playlist.Name, playlist.Description, playlist.IsInbox, 0, playlist.Id);
-        return CreatedAtAction(nameof(GetAllAsync), new { id = playlist.Id }, dto);
+        return Created($"/api/playlists/{playlist.Id}", dto);
     }
 
     [HttpPost("{id:int}/inbox")]

@@ -41,7 +41,8 @@ public class SyncController(
             .OrderByDescending(s => s.StartedAt)
             .FirstOrDefaultAsync(ct);
 
-        return Ok(latest);
+        // Explicitly wrap to avoid ASP.NET Core returning 204 No Content for null values
+        return new OkObjectResult(latest ?? (object)new { }) { StatusCode = StatusCodes.Status200OK };
     }
 
     [HttpGet("history")]

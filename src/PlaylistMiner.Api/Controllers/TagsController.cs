@@ -33,7 +33,7 @@ public class TagsController(ITagRepository tagRepository) : ControllerBase
             }, ct);
 
             var dto = new TagWithCountDto(tag.Id, tag.Name, tag.Slug, tag.Category, 0);
-            return CreatedAtAction(nameof(GetAllAsync), new { id = tag.Id }, dto);
+            return Created($"/api/tags/{tag.Id}", dto);
         }
         catch (Exception ex) when (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") ||
                                     ex.InnerException?.Message.Contains("unique") == true ||
@@ -75,7 +75,7 @@ public class TagsController(ITagRepository tagRepository) : ControllerBase
             Weight = request.Weight
         }, ct);
 
-        return CreatedAtAction(nameof(GetRulesAsync), new { id }, rule);
+        return Created($"/api/tags/{id}/rules/{rule.Id}", rule);
     }
 
     [HttpDelete("{id:int}/rules/{ruleId:int}")]
