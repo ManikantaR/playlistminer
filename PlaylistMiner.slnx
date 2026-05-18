@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PlaylistMiner.Api/PlaylistMiner.Api.csproj" />
+    <Project Path="src/PlaylistMiner.AppHost/PlaylistMiner.AppHost.csproj" />
+    <Project Path="src/PlaylistMiner.CLI/PlaylistMiner.CLI.csproj" />
+    <Project Path="src/PlaylistMiner.Core/PlaylistMiner.Core.csproj" />
+    <Project Path="src/PlaylistMiner.Infrastructure/PlaylistMiner.Infrastructure.csproj" />
+    <Project Path="src/PlaylistMiner.ServiceDefaults/PlaylistMiner.ServiceDefaults.csproj" />
+    <Project Path="src/PlaylistMiner.Worker/PlaylistMiner.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj" />
+    <Project Path="tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj" />
+  </Folder>
+</Solution>

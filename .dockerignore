@@ -1,0 +1,28 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+**/.vs/
+
+# .NET user secrets and local config
+appsettings.*.local.json
+*.user
+
+# Test results
+**/TestResults/
+**/*.trx
+
+# Node.js
+node_modules/
+.next/
+npm-debug.log*
+
+# Podman / Docker
+*.env
+.env
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/

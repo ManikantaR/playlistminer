@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>playlistminer-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PlaylistMiner.ServiceDefaults\PlaylistMiner.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\PlaylistMiner.Core\PlaylistMiner.Core.csproj" />
+    <ProjectReference Include="..\PlaylistMiner.Infrastructure\PlaylistMiner.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
