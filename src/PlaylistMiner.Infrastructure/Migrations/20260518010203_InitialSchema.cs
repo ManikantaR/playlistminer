@@ -499,13 +499,6 @@ namespace PlaylistMiner.Infrastructure.Migrations
                 column: "tag_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_videos_title_fulltext",
-                table: "videos",
-                column: "title")
-                .Annotation("Npgsql:IndexMethod", "GiST")
-                .Annotation("Npgsql:IndexOperators", new[] { "gin_trgm_ops" });
-
-            migrationBuilder.CreateIndex(
                 name: "ix_videos_youtube_id",
                 table: "videos",
                 column: "youtube_id",

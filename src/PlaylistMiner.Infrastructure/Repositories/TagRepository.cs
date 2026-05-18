@@ -13,13 +13,13 @@ public class TagRepository(PlaylistMinerDbContext db) : ITagRepository
     {
         return await db.Tags
             .AsNoTracking()
+            .OrderBy(t => t.Name)
             .Select(t => new TagWithCountDto(
                 t.Id,
                 t.Name,
                 t.Slug,
                 t.Category,
                 t.VideoTags.Count))
-            .OrderBy(t => t.Name)
             .ToListAsync(ct);
     }
 

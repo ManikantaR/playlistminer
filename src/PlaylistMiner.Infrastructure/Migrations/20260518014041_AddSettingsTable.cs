@@ -11,10 +11,6 @@ namespace PlaylistMiner.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "ix_videos_title_fulltext",
-                table: "videos");
-
             migrationBuilder.CreateTable(
                 name: "settings",
                 columns: table => new
@@ -34,13 +30,6 @@ namespace PlaylistMiner.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "settings");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_videos_title_fulltext",
-                table: "videos",
-                column: "title")
-                .Annotation("Npgsql:IndexMethod", "GiST")
-                .Annotation("Npgsql:IndexOperators", new[] { "gin_trgm_ops" });
         }
     }
 }

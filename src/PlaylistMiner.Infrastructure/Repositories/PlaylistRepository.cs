@@ -12,6 +12,7 @@ public class PlaylistRepository(PlaylistMinerDbContext db) : IPlaylistRepository
     {
         return await db.Playlists
             .AsNoTracking()
+            .OrderBy(p => p.Name)
             .Select(p => new PlaylistDto(
                 p.YouTubeId,
                 p.Name,
@@ -19,7 +20,6 @@ public class PlaylistRepository(PlaylistMinerDbContext db) : IPlaylistRepository
                 p.IsInbox,
                 p.PlaylistVideos.Count,
                 p.Id))
-            .OrderBy(p => p.Name)
             .ToListAsync(ct);
     }
 
