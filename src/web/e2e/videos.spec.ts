@@ -60,7 +60,7 @@ test.describe('Videos page', () => {
 
   test('shows tag badges', async ({ page }) => {
     await page.goto('/videos');
-    await expect(page.getByText('TypeScript')).toBeVisible();
+    await expect(page.getByText('TypeScript', { exact: true })).toBeVisible();
   });
 
   test('has search input', async ({ page }) => {
