@@ -23,9 +23,11 @@ public class VideoRepository(PlaylistMinerDbContext db) : IVideoRepository
                         """
                         SELECT v.id AS "Value"
                         FROM videos v
-                        WHERE similarity(v.title, {0}) > 0.2
+                        WHERE similarity(v.title, {0}) > 0.1
                            OR to_tsvector('english', v.title || ' ' || v.description)
                               @@ plainto_tsquery('english', {0})
+                           OR v.title ILIKE '%' || {0} || '%'
+                           OR v.description ILIKE '%' || {0} || '%'
                         ORDER BY similarity(v.title, {0}) DESC,
                                  ts_rank(to_tsvector('english', v.title || ' ' || v.description),
                                          plainto_tsquery('english', {0})) DESC
