@@ -1,6 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using PlaylistMiner.Core.Categorization;
 using PlaylistMiner.Core.Interfaces;
+using PlaylistMiner.Infrastructure.Categorization;
+using PlaylistMiner.Infrastructure.Repositories;
 using PlaylistMiner.Infrastructure.Services;
 using PlaylistMiner.Infrastructure.YouTube;
 
@@ -33,6 +37,31 @@ public static class InfrastructureServiceExtensions
         });
 
         services.AddScoped<ISyncService, SyncService>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddCategorizationEngine(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddMemoryCache();
+        services.Configure<CategorizationOptions>(
+            configuration.GetSection(CategorizationOptions.SectionName));
+
+        services.AddScoped<ITagRuleRepository, TagRuleRepository>();
+        services.AddScoped<IKeywordMatcher, KeywordMatcher>();
+        services.AddScoped<ITfIdfScorer, TfIdfScorer>();
+        services.AddScoped<IOllamaCategorizer, OllamaCategorizer>();
+        services.AddScoped<ICategorizationPipeline, CategorizationPipeline>();
+        services.AddScoped<ISelfLearningService, SelfLearningService>();
+
+        services.AddHttpClient<OllamaCategorizer>("Ollama", (sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<CategorizationOptions>>().Value;
+            client.BaseAddress = new Uri(opts.OllamaBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(35);
+        });
 
         return services;
     }
