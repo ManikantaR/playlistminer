@@ -1,3 +1,4 @@
+using PlaylistMiner.Infrastructure;
 using PlaylistMiner.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,7 @@ builder.AddNpgsqlDbContext<PlaylistMinerDbContext>("playlistminer");
 // Add services to the container.
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+builder.Services.AddYouTubeIntegration(builder.Configuration);
 
 var app = builder.Build();
 
