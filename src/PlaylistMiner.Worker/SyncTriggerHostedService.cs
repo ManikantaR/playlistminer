@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PlaylistMiner.Core.Interfaces;
@@ -5,8 +6,7 @@ using PlaylistMiner.Core.Interfaces;
 namespace PlaylistMiner.Worker;
 
 public class SyncTriggerHostedService(
-    ISyncTrigger trigger,
-    ISyncService syncService,
+    IServiceScopeFactory scopeFactory,
     ILogger<SyncTriggerHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -15,6 +15,10 @@ public class SyncTriggerHostedService(
         {
             try
             {
+                using var scope = scopeFactory.CreateScope();
+                var trigger = scope.ServiceProvider.GetRequiredService<ISyncTrigger>();
+                var syncService = scope.ServiceProvider.GetRequiredService<ISyncService>();
+
                 var request = await trigger.GetPendingRequestAsync(stoppingToken);
                 if (request is not null)
                 {

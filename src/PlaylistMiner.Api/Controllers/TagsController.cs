@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using PlaylistMiner.Api.Models;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
@@ -35,10 +36,7 @@ public class TagsController(ITagRepository tagRepository) : ControllerBase
             var dto = new TagWithCountDto(tag.Id, tag.Name, tag.Slug, tag.Category, 0);
             return Created($"/api/tags/{tag.Id}", dto);
         }
-        catch (Exception ex) when (ex.Message.Contains("unique") || ex.Message.Contains("duplicate") ||
-                                    ex.InnerException?.Message.Contains("unique") == true ||
-                                    ex.InnerException?.Message.Contains("duplicate") == true ||
-                                    ex.InnerException?.Message.Contains("ix_tags_name") == true)
+        catch (DbUpdateException)
         {
             return Conflict(new ProblemDetails { Title = "Tag with this name already exists." });
         }

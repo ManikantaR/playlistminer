@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using PlaylistMiner.Core.DTOs;
@@ -66,7 +67,7 @@ public class TagsControllerTests
         // Arrange
         var mockRepo = new Mock<ITagRepository>();
         mockRepo.Setup(r => r.CreateAsync(It.IsAny<Tag>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("duplicate key value violates unique constraint ix_tags_name"));
+            .ThrowsAsync(new DbUpdateException("duplicate key value violates unique constraint ix_tags_name"));
 
         using var factory = new PlaylistMinerWebAppFactory(services =>
             services.AddSingleton(mockRepo.Object));

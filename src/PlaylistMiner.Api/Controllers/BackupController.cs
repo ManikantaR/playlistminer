@@ -5,14 +5,25 @@ namespace PlaylistMiner.Api.Controllers;
 
 [ApiController]
 [Route("api/backup")]
-public class BackupController(IBackupService backupService) : ControllerBase
+public class BackupController(IBackupService backupService, ILogger<BackupController> logger) : ControllerBase
 {
     [HttpPost("trigger")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
-    public IActionResult Trigger()
+    public IActionResult Trigger(CancellationToken ct = default)
     {
-        _ = backupService.TriggerBackupAsync(HttpContext.RequestAborted);
-        return Accepted();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await backupService.TriggerBackupAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Background backup failed.");
+            }
+        }, ct);
+
+        return Accepted(new { message = "Backup triggered." });
     }
 
     [HttpGet("history")]

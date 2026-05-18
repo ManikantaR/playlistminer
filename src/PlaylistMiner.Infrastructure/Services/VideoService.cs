@@ -43,7 +43,7 @@ public class VideoService(PlaylistMinerDbContext db, ISelfLearningService selfLe
     public async Task RejectTagAsync(int videoId, int tagId, CancellationToken ct = default)
     {
         var videoTag = await db.VideoTags
-            .FirstOrDefaultAsync(vt => vt.VideoId == videoId && vt.TagId == tagId, ct);
+            .FirstOrDefaultAsync(vt => vt.VideoId == videoId && vt.TagId == tagId && vt.Source != TagSource.Manual, ct);
 
         if (videoTag is not null)
         {
