@@ -14,10 +14,34 @@ public class VideoRepository(PlaylistMinerDbContext db) : IVideoRepository
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var search = filter.Search.ToLowerInvariant();
-            query = query.Where(v =>
-                EF.Functions.ILike(v.Title, $"%{search}%") ||
-                EF.Functions.ILike(v.Description, $"%{search}%"));
+            var search = filter.Search;
+
+            if (db.Database.IsNpgsql())
+            {
+                var videoIds = await db.Database
+                    .SqlQueryRaw<int>(
+                        """
+                        SELECT v.id AS "Value"
+                        FROM videos v
+                        WHERE similarity(v.title, {0}) > 0.2
+                           OR to_tsvector('english', v.title || ' ' || v.description)
+                              @@ plainto_tsquery('english', {0})
+                        ORDER BY similarity(v.title, {0}) DESC,
+                                 ts_rank(to_tsvector('english', v.title || ' ' || v.description),
+                                         plainto_tsquery('english', {0})) DESC
+                        """,
+                        search)
+                    .ToListAsync(ct);
+
+                query = query.Where(v => videoIds.Contains(v.Id));
+            }
+            else
+            {
+                var lowerSearch = search.ToLowerInvariant();
+                query = query.Where(v =>
+                    EF.Functions.ILike(v.Title, $"%{lowerSearch}%") ||
+                    EF.Functions.ILike(v.Description, $"%{lowerSearch}%"));
+            }
         }
 
         if (filter.Status.HasValue)

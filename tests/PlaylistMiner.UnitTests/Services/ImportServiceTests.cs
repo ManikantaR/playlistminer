@@ -2,6 +2,10 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using PlaylistMiner.Core.DTOs;
+using PlaylistMiner.Core.Interfaces;
+using PlaylistMiner.Core.Models;
 using PlaylistMiner.Infrastructure.Data;
 using PlaylistMiner.Infrastructure.Services;
 
@@ -18,28 +22,33 @@ public class ImportServiceTests
         return new PlaylistMinerDbContext(opts);
     }
 
+    private static Mock<IYouTubeApiClient> CreateYouTubeClientMock()
+    {
+        var mock = new Mock<IYouTubeApiClient>();
+        mock.Setup(c => c.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<string> ids, CancellationToken _) =>
+                ids.Select(id => new VideoMetadataDto(
+                    id, $"Title {id}", "Description", "Channel", "UC123",
+                    "https://thumb.jpg", TimeSpan.FromMinutes(5),
+                    DateTime.UtcNow, VideoStatus.Active)).ToList());
+        return mock;
+    }
+
     [Fact]
     public async Task Test_ImportTakeout_ParsesCsvAndCreatesVideos()
     {
-        // Arrange
         using var db = CreateDb();
-        var svc = new ImportService(db, NullLogger<ImportService>.Instance);
+        var ytMock = CreateYouTubeClientMock();
+        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
 
-        var csv = """
-            Video ID,Playlist name,Created at
-            dQw4w9WgXcQ,My Playlist,2024-01-01
-            xvFZjo5PgG0,My Playlist,2024-01-02
-            """;
+        var csv = "Video Id,Time Added\ndQw4w9WgXcQ,2024-01-01\nxvFZjo5PgG0,2024-01-02";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
 
-        // Act
         var result = await svc.ImportTakeoutAsync(stream);
 
-        // Assert
         result.VideosFound.Should().Be(2);
         result.VideosImported.Should().Be(2);
         result.Errors.Should().Be(0);
-        result.BatchId.Should().NotBeNullOrEmpty();
 
         var videos = await db.Videos.ToListAsync();
         videos.Should().HaveCount(2);
@@ -47,19 +56,108 @@ public class ImportServiceTests
     }
 
     [Fact]
-    public async Task Test_ImportTakeout_InvalidCsv_ReturnsErrors()
+    public async Task Test_ImportTakeout_SkipsDuplicates()
     {
-        // Arrange
         using var db = CreateDb();
-        var svc = new ImportService(db, NullLogger<ImportService>.Instance);
+        db.Videos.Add(new Video
+        {
+            YouTubeId = "existing1",
+            Title = "Existing",
+            Description = "",
+            ChannelName = "",
+            ChannelId = "",
+            ThumbnailUrl = "",
+            Status = VideoStatus.Active,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            SyncedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
 
-        var csv = "NotAVideoId,bad header\n";
+        var ytMock = CreateYouTubeClientMock();
+        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+
+        var csv = "Video Id,Time Added\nexisting1,2024-01-01\nnewvid1,2024-01-02";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
 
-        // Act
         var result = await svc.ImportTakeoutAsync(stream);
 
-        // Assert
+        result.VideosFound.Should().Be(2);
+        result.VideosImported.Should().Be(1);
+        result.Skipped.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Test_ImportTakeout_InvalidCsv_ReturnsErrors()
+    {
+        using var db = CreateDb();
+        var ytMock = CreateYouTubeClientMock();
+        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+
+        var csv = "NotAVideoId,bad header\ndata,more";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+        var result = await svc.ImportTakeoutAsync(stream);
+
         result.Errors.Should().BeGreaterThan(0);
+        result.VideosImported.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Test_ImportTakeout_HydratesViaYouTubeApi()
+    {
+        using var db = CreateDb();
+        var ytMock = CreateYouTubeClientMock();
+        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+
+        var csv = "Video Id\nvid001\nvid002\nvid003";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+        await svc.ImportTakeoutAsync(stream);
+
+        ytMock.Verify(c => c.GetVideoMetadataAsync(
+            It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+
+        var videos = await db.Videos.ToListAsync();
+        videos.Should().AllSatisfy(v => v.Title.Should().StartWith("Title "));
+    }
+
+    [Fact]
+    public async Task Test_ImportTakeout_RecordsImportBatch()
+    {
+        using var db = CreateDb();
+        var ytMock = CreateYouTubeClientMock();
+        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+
+        var csv = "Video Id\nvid001";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+        await svc.ImportTakeoutAsync(stream);
+
+        var batches = await db.ImportBatches.ToListAsync();
+        batches.Should().HaveCount(1);
+        batches[0].Source.Should().Be("Takeout");
+        batches[0].ImportedCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Test_ImportTakeout_UnavailableVideos_MarkedCorrectly()
+    {
+        using var db = CreateDb();
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(c => c.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<VideoMetadataDto>());
+
+        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+
+        var csv = "Video Id\ndeleted_vid";
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+
+        await svc.ImportTakeoutAsync(stream);
+
+        var video = await db.Videos.FirstOrDefaultAsync(v => v.YouTubeId == "deleted_vid");
+        video.Should().NotBeNull();
+        video!.Status.Should().Be(VideoStatus.Unavailable);
+        video.Title.Should().Contain("Unavailable");
     }
 }
