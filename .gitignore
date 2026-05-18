@@ -1,0 +1,41 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+.vs/
+*.DotSettings.user
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.env*.local
+
+# Environment
+.env
+*.env
+
+# Data volumes (PostgreSQL, Ollama, backups)
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+coverage/
+playwright-report/
+
+# Build
+publish/
+dist/
