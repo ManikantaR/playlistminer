@@ -22,7 +22,7 @@ public static class InfrastructureServiceExtensions
 
         services.AddHttpClient("GoogleOAuth");
 
-        services.AddSingleton<ITokenProvider, OAuthTokenProvider>();
+        services.AddScoped<ITokenProvider, OAuthTokenProvider>();
 
         services.AddScoped<IYouTubeApiClient>(sp =>
         {
