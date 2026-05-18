@@ -38,7 +38,7 @@ jobs:
 
       - name: Build .NET
         if: matrix.language == 'csharp'
-        run: dotnet build --configuration Release
+        run: dotnet build PlaylistMiner.slnx --configuration Release
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

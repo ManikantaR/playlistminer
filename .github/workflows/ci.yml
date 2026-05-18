@@ -39,10 +39,10 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore PlaylistMiner.slnx
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build PlaylistMiner.slnx --no-restore --configuration Release
 
       - name: Enable pg_trgm extension
         run: |
@@ -151,7 +151,7 @@ jobs:
 
       - name: Build and start API
         run: |
-          dotnet build --configuration Release
+          dotnet build PlaylistMiner.slnx --configuration Release
           dotnet run --project src/PlaylistMiner.Api --configuration Release &
         env:
           ConnectionStrings__Default: "Host=localhost;Port=5432;Database=playlistminer_e2e;Username=pmuser;Password=testpassword"

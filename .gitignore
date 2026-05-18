@@ -19,7 +19,7 @@ out/
 *.env
 
 # Data volumes (PostgreSQL, Ollama, backups)
-data/
+/data/
 
 # IDE
 .idea/
