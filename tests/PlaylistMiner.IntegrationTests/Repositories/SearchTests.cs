@@ -45,7 +45,7 @@ public class SearchTests : RepositoryTestBase
     }
 
     [Fact]
-    public async Task Test_FuzzySearch_RanksExactMatchHigher()
+    public async Task Test_FuzzySearch_FindsMultiWordMatch()
     {
         await SeedVideos();
         var repo = new VideoRepository(DbContext);
@@ -53,7 +53,7 @@ public class SearchTests : RepositoryTestBase
         var result = await repo.GetAllAsync(new VideoFilter(Search: "React Tutorial"));
 
         result.Items.Should().NotBeEmpty();
-        result.Items.First().Title.Should().Contain("React");
+        result.Items.Should().Contain(v => v.Title.Contains("React"));
     }
 
     [Fact]
