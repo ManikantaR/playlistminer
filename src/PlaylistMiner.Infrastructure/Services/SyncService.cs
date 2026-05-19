@@ -10,6 +10,7 @@ namespace PlaylistMiner.Infrastructure.Services;
 
 public sealed class SyncService(
     IYouTubeApiClient youTubeApiClient,
+    IQuotaTracker quotaTracker,
     PlaylistMinerDbContext db,
     ILogger<SyncService> logger) : ISyncService
 {
@@ -25,6 +26,12 @@ public sealed class SyncService(
 
     private async Task<SyncResult> RunSyncAsync(bool syncInboxOnly, CancellationToken ct)
     {
+        if (await quotaTracker.IsQuotaExhaustedAsync(ct))
+        {
+            logger.LogWarning("Skipping sync — YouTube API quota exhausted for today.");
+            return new SyncResult(0, 0, ["YouTube API quota exhausted for today. Will resume after midnight Pacific."], 0);
+        }
+
         var syncLog = new SyncLog
         {
             SyncType = syncInboxOnly ? "Inbox" : "Full",

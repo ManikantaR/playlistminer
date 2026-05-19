@@ -21,16 +21,19 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
 
     private readonly HttpClient _httpClient;
     private readonly ITokenProvider _tokenProvider;
+    private readonly IQuotaTracker? _quotaTracker;
     private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
     private readonly SemaphoreSlim _rateLimiter = new(10, 10);
 
     public YouTubeApiClient(
         HttpClient httpClient,
         ITokenProvider tokenProvider,
+        IQuotaTracker? quotaTracker = null,
         ResiliencePipeline<HttpResponseMessage>? retryPipeline = null)
     {
         _httpClient = httpClient;
         _tokenProvider = tokenProvider;
+        _quotaTracker = quotaTracker;
         _retryPipeline = retryPipeline ?? BuildDefaultRetryPipeline();
     }
 
@@ -199,6 +202,9 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
     private async Task<HttpResponseMessage> ExecuteWithRateLimitAsync(
         Func<Task<HttpResponseMessage>> action, CancellationToken ct)
     {
+        if (_quotaTracker is not null && await _quotaTracker.IsQuotaExhaustedAsync(ct))
+            throw new QuotaExhaustedException();
+
         await _rateLimiter.WaitAsync(ct);
         try
         {
@@ -224,7 +230,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
         return _httpClient.SendAsync(request, ct);
     }
 
-    private static async Task EnsureSuccessOrThrowAsync(HttpResponseMessage response, CancellationToken ct)
+    private async Task EnsureSuccessOrThrowAsync(HttpResponseMessage response, CancellationToken ct)
     {
         if (response.IsSuccessStatusCode)
             return;
@@ -233,7 +239,11 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
         {
             var body = await response.Content.ReadAsStringAsync(ct);
             if (body.Contains("quotaExceeded", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_quotaTracker is not null)
+                    await _quotaTracker.RecordQuotaExhaustedAsync(ct);
                 throw new QuotaExhaustedException();
+            }
         }
 
         response.EnsureSuccessStatusCode();

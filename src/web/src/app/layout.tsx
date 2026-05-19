@@ -3,6 +3,7 @@ import './globals.css';
 import Providers from './providers';
 import Sidebar from '@/components/Sidebar';
 import DarkModeToggle from '@/components/DarkModeToggle';
+import QuotaBanner from '@/components/QuotaBanner';
 
 export const metadata: Metadata = {
   title: 'PlaylistMiner',
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <header className="h-14 flex items-center justify-end px-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                 <DarkModeToggle />
               </header>
+              <QuotaBanner />
               <main className="flex-1 overflow-y-auto p-6">{children}</main>
             </div>
           </div>

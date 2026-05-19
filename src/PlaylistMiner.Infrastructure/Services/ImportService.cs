@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PlaylistMiner.Core.DTOs;
+using PlaylistMiner.Core.Exceptions;
 using PlaylistMiner.Core.Import;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
@@ -11,10 +12,13 @@ namespace PlaylistMiner.Infrastructure.Services;
 public class ImportService(
     PlaylistMinerDbContext db,
     IYouTubeApiClient youTubeApiClient,
+    IQuotaTracker quotaTracker,
     ILogger<ImportService> logger) : IImportService
 {
     public async Task<ImportResult> ImportTakeoutAsync(Stream csvStream, CancellationToken ct = default)
     {
+        if (await quotaTracker.IsQuotaExhaustedAsync(ct))
+            return new ImportResult(0, 0, 0, 1, "YouTube API quota exhausted for today. Try again after midnight Pacific.");
         List<TakeoutEntry> entries;
         try
         {
@@ -85,6 +89,12 @@ public class ImportService(
                         imported++;
                     }
                 }
+            }
+            catch (QuotaExhaustedException)
+            {
+                logger.LogWarning("YouTube API quota exhausted during import. Stopping hydration.");
+                errors += batch.Length;
+                break;
             }
             catch (Exception ex)
             {

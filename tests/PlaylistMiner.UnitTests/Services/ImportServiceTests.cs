@@ -22,6 +22,14 @@ public class ImportServiceTests
         return new PlaylistMinerDbContext(opts);
     }
 
+    private static Mock<IQuotaTracker> CreateQuotaTrackerMock()
+    {
+        var mock = new Mock<IQuotaTracker>();
+        mock.Setup(q => q.IsQuotaExhaustedAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        return mock;
+    }
+
     private static Mock<IYouTubeApiClient> CreateYouTubeClientMock()
     {
         var mock = new Mock<IYouTubeApiClient>();
@@ -39,7 +47,7 @@ public class ImportServiceTests
     {
         using var db = CreateDb();
         var ytMock = CreateYouTubeClientMock();
-        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+        var svc = new ImportService(db, ytMock.Object, CreateQuotaTrackerMock().Object, NullLogger<ImportService>.Instance);
 
         var csv = "Video Id,Time Added\ndQw4w9WgXcQ,2024-01-01\nxvFZjo5PgG0,2024-01-02";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
@@ -75,7 +83,7 @@ public class ImportServiceTests
         await db.SaveChangesAsync();
 
         var ytMock = CreateYouTubeClientMock();
-        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+        var svc = new ImportService(db, ytMock.Object, CreateQuotaTrackerMock().Object, NullLogger<ImportService>.Instance);
 
         var csv = "Video Id,Time Added\nexisting1,2024-01-01\nnewvid1,2024-01-02";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
@@ -92,7 +100,7 @@ public class ImportServiceTests
     {
         using var db = CreateDb();
         var ytMock = CreateYouTubeClientMock();
-        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+        var svc = new ImportService(db, ytMock.Object, CreateQuotaTrackerMock().Object, NullLogger<ImportService>.Instance);
 
         var csv = "NotAVideoId,bad header\ndata,more";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
@@ -108,7 +116,7 @@ public class ImportServiceTests
     {
         using var db = CreateDb();
         var ytMock = CreateYouTubeClientMock();
-        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+        var svc = new ImportService(db, ytMock.Object, CreateQuotaTrackerMock().Object, NullLogger<ImportService>.Instance);
 
         var csv = "Video Id\nvid001\nvid002\nvid003";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
@@ -127,7 +135,7 @@ public class ImportServiceTests
     {
         using var db = CreateDb();
         var ytMock = CreateYouTubeClientMock();
-        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+        var svc = new ImportService(db, ytMock.Object, CreateQuotaTrackerMock().Object, NullLogger<ImportService>.Instance);
 
         var csv = "Video Id\nvid001";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));
@@ -148,7 +156,7 @@ public class ImportServiceTests
         ytMock.Setup(c => c.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<VideoMetadataDto>());
 
-        var svc = new ImportService(db, ytMock.Object, NullLogger<ImportService>.Instance);
+        var svc = new ImportService(db, ytMock.Object, CreateQuotaTrackerMock().Object, NullLogger<ImportService>.Instance);
 
         var csv = "Video Id\ndeleted_vid";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(csv));

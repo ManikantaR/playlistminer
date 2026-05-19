@@ -23,6 +23,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__playlistminer: "Host=pm-db;Database=playlistminer;Username=${POSTGRES_USER:-playlistminer};Password=${POSTGRES_PASSWORD}"
       YouTube__ApiKey: ${YOUTUBE_API_KEY}
+      YouTube__ClientId: ${YOUTUBE_CLIENT_ID}
+      YouTube__ClientSecret: ${YOUTUBE_CLIENT_SECRET}
+      YouTube__EncryptionKey: ${YOUTUBE_ENCRYPTION_KEY}
+      YouTube__RedirectUri: http://localhost:${API_PORT:-5000}/api/oauth/callback
     depends_on:
       pm-db:
         condition: service_healthy
@@ -35,6 +39,9 @@ services:
       DOTNET_ENVIRONMENT: Production
       ConnectionStrings__playlistminer: "Host=pm-db;Database=playlistminer;Username=${POSTGRES_USER:-playlistminer};Password=${POSTGRES_PASSWORD}"
       YouTube__ApiKey: ${YOUTUBE_API_KEY}
+      YouTube__ClientId: ${YOUTUBE_CLIENT_ID}
+      YouTube__ClientSecret: ${YOUTUBE_CLIENT_SECRET}
+      YouTube__EncryptionKey: ${YOUTUBE_ENCRYPTION_KEY}
     depends_on:
       pm-db:
         condition: service_healthy

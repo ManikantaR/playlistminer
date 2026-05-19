@@ -98,6 +98,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act
@@ -169,6 +170,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act
@@ -207,6 +209,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act
@@ -250,6 +253,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act
@@ -299,6 +303,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act
@@ -328,6 +333,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act & Assert
@@ -365,6 +371,7 @@ public class YouTubeApiClientTests
         var client = new YouTubeApiClient(
             CreateHttpClient(handlerMock),
             CreateTokenProviderMock().Object,
+            quotaTracker: null,
             retryPipeline);
 
         // Act

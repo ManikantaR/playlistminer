@@ -14,9 +14,10 @@ node_modules/
 out/
 .env*.local
 
-# Environment
+# Environment & secrets
 .env
 *.env
+client_secret*.json
 
 # Data volumes (PostgreSQL, Ollama, backups)
 /data/

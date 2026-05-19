@@ -55,13 +55,15 @@ public static class InfrastructureServiceExtensions
         services.AddHttpClient("GoogleOAuth");
 
         services.AddScoped<ITokenProvider, OAuthTokenProvider>();
+        services.AddScoped<IQuotaTracker, QuotaTracker>();
 
         services.AddScoped<IYouTubeApiClient>(sp =>
         {
             var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
             var httpClient = httpClientFactory.CreateClient("YouTube");
             var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-            return new YouTubeApiClient(httpClient, tokenProvider);
+            var quotaTracker = sp.GetRequiredService<IQuotaTracker>();
+            return new YouTubeApiClient(httpClient, tokenProvider, quotaTracker);
         });
 
         services.AddScoped<ISyncService, SyncService>();
