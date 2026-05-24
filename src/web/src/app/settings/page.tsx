@@ -1,32 +1,88 @@
 'use client';
 import { useSyncStatus } from '@/hooks/useSync';
+import { useOAuthStatus, useConnect, useDisconnect } from '@/hooks/useOAuth';
 import Card from '@/components/ui/Card';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+function OAuthAlerts() {
+  const searchParams = useSearchParams();
+  const justConnected = searchParams.get('connected') === 'true';
+  const oauthError = searchParams.get('error');
+
+  if (justConnected) {
+    return (
+      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-sm text-green-700 dark:text-green-300">
+        YouTube connected successfully!
+      </div>
+    );
+  }
+
+  if (oauthError) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-300">
+        {oauthError === 'denied'
+          ? 'YouTube authorization was denied.'
+          : 'Failed to connect YouTube. Please try again.'}
+      </div>
+    );
+  }
+
+  return null;
+}
 
 export default function SettingsPage() {
   const { data: syncStatus } = useSyncStatus();
+  const { data: oauthStatus, isLoading: oauthLoading } = useOAuthStatus();
+  const connect = useConnect();
+  const disconnect = useDisconnect();
   const [tfIdfThreshold, setTfIdfThreshold] = useState(0.3);
   const [ollamaThreshold, setOllamaThreshold] = useState(0.5);
   const [autoAcceptThreshold, setAutoAcceptThreshold] = useState(0.9);
+
+  const connected = oauthStatus?.connected ?? false;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold">Settings</h1>
 
+      <Suspense>
+        <OAuthAlerts />
+      </Suspense>
+
       <Card>
         <h2 className="text-lg font-semibold mb-3">YouTube Connection</h2>
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-3 h-3 rounded-full ${
-              syncStatus ? 'bg-green-500' : 'bg-gray-300'
-            }`}
-          />
-          <span className="text-sm">
-            {syncStatus ? 'Connected' : 'Not connected'}
-          </span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-3 h-3 rounded-full ${
+                connected ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            />
+            <span className="text-sm">
+              {oauthLoading ? 'Checking...' : connected ? 'Connected' : 'Not connected'}
+            </span>
+          </div>
+          {connected ? (
+            <button
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+              className="px-4 py-2 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+            >
+              {disconnect.isPending ? 'Disconnecting...' : 'Disconnect'}
+            </button>
+          ) : (
+            <button
+              onClick={() => connect.mutate()}
+              disabled={connect.isPending || oauthLoading}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {connect.isPending ? 'Redirecting...' : 'Connect YouTube'}
+            </button>
+          )}
         </div>
         {syncStatus?.lastSync && (
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-gray-500 mt-3">
             Last sync: {new Date(syncStatus.lastSync).toLocaleString()}
           </p>
         )}
