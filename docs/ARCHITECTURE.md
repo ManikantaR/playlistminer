@@ -49,3 +49,15 @@
 **Decision:** Follow strict Red-Green-Refactor TDD cycle using xUnit for all C# code.
 
 **Rationale:** Ensures test coverage from the start, catches regressions early, and produces better-designed code through test-first thinking. Integration tests use Testcontainers for real PostgreSQL instances.
+
+## ADR-009: Deploy on the UGREEN NAS with Docker (amends ADR-007)
+
+**Decision:** Production deployment target is the UGREEN DXP4800+ NAS running **Docker** (UGOS), not podman. Podman remains the local dev runtime on the Mac. The agent's LLM inference (Ollama) runs on the **M1 Mac**, not the NAS. See `docs/NAS-DEPLOYMENT-SPEC.md`.
+
+**Rationale:**
+- An autonomous learning agent (VISION-v2) must be always-on; a laptop sleeps, the NAS doesn't. The NAS is the correct host for the db/api/worker/web tier.
+- UGOS supports Docker + `docker compose` v2 natively; podman is not a first-class NAS runtime. The existing `podman-compose.yml` is ~portable to `docker compose`. This amends ADR-007 (podman over Docker) — podman for dev, Docker for the NAS.
+- The N100 CPU runs a 7B model at ~0.5–1 tok/s, so Ollama stays on the M1 Mac; the NAS worker calls it over the LAN and degrades gracefully (queues) when the Mac is asleep, with an on-demand "Process now" trigger.
+- PlaylistMiner inherits MoneyPulse's proven homelab patterns (Traefik, `*.home.lab`, `deploy-to-nas.sh`, gitleaks, the `NEXT_PUBLIC_*` build-arg fix).
+
+**Consequence:** The homelab runs a real domain with wildcard Let's Encrypt TLS, so OAuth completes **directly on the NAS** at `https://playlistminer.home.manikantar.com/api/oauth/callback` (the redirect is browser-side; the LAN browser resolves via AdGuard and trusts the cert). The redirect URI must be registered in Google Console and the consent screen Published (Testing-mode tokens expire in 7 days). An API key is insufficient (public reads only). Mac-localhost bootstrap + token copy remains a fallback (requires identical `YouTube__EncryptionKey` both hosts). If N100 build times become painful, fall back to building on the Mac or GitHub Actions → GHCR with the NAS pulling images.
