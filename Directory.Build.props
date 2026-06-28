@@ -12,6 +12,9 @@
   <PropertyGroup>
     <NuGetAuditSuppress>
       https://github.com/advisories/GHSA-w7r3-mgwf-4mqq;
+      https://github.com/advisories/GHSA-vh6j-jc39-fggf;
+      https://github.com/advisories/GHSA-w567-gjr2-hm5j;
+      https://github.com/advisories/GHSA-wfr3-xj75-pfwh;
     </NuGetAuditSuppress>
   </PropertyGroup>
 </Project>

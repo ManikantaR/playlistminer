@@ -12,8 +12,8 @@ export default function PipelineCard() {
 
   useEffect(() => {
     if (!run || (run.status !== 'in_progress' && run.status !== 'pending')) {
-      setElapsed('');
-      return;
+      const t = setTimeout(() => setElapsed(''), 0);
+      return () => clearTimeout(t);
     }
 
     const interval = setInterval(() => {

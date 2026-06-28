@@ -36,8 +36,8 @@ export default function OperationsPage() {
   // Calculate elapsed time for active run
   useEffect(() => {
     if (!activeRun || (activeRun.status !== 'in_progress' && activeRun.status !== 'pending')) {
-      setElapsed('');
-      return;
+      const t = setTimeout(() => setElapsed(''), 0);
+      return () => clearTimeout(t);
     }
 
     const updateTimer = () => {
