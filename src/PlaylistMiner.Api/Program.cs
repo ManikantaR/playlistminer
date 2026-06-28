@@ -9,7 +9,7 @@ builder.AddNpgsqlDbContext<PlaylistMinerDbContext>("playlistminer");
 
 builder.Services.AddOpenApi();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins("http://localhost:3000", "http://localhost:3001").AllowAnyMethod().AllowAnyHeader()));
+    p.WithOrigins("http://localhost:3000", "http://localhost:3001", "https://playlistminer.home.manikantar.com").AllowAnyMethod().AllowAnyHeader()));
 builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
 builder.Services.AddInfrastructure(builder.Configuration);

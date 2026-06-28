@@ -119,11 +119,14 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://playlistminer.home.manikantar.com}
     container_name: pm-web
     restart: unless-stopped
+    environment:
+      - INTERNAL_API_URL=http://pm-api:8080
     depends_on:
       pm-api:
         condition: service_healthy
     networks:
       - traefik-public
+      - pm-internal
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pm-web.rule=Host(`playlistminer.home.manikantar.com`)"
