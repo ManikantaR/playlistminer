@@ -12,9 +12,10 @@ public class CategorizationPipeline(
     ITfIdfScorer tfIdfScorer,
     IOllamaCategorizer ollamaCategorizer,
     PlaylistMinerDbContext db,
+    IPipelineRunTracker tracker,
     ILogger<CategorizationPipeline> logger) : ICategorizationPipeline
 {
-    public async Task<List<TagSuggestion>> CategorizeAsync(int videoId, CancellationToken ct = default)
+    public async Task<List<TagSuggestion>> CategorizeAsync(int videoId, string? runId = null, CancellationToken ct = default)
     {
         var video = await db.Videos
             .Include(v => v.VideoTags)
@@ -31,6 +32,11 @@ public class CategorizationPipeline(
         {
             logger.LogInformation("Video {VideoId} already has manual tags; skipping", videoId);
             return [];
+        }
+
+        if (runId is not null)
+        {
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "rule_matching", message: $"Running keyword matching and TF-IDF scoring for video {videoId}...", ct: ct);
         }
 
         var context = new VideoContext(video.Title, video.Description);
@@ -56,6 +62,11 @@ public class CategorizationPipeline(
         {
             if (await ollamaCategorizer.IsAvailableAsync(ct))
             {
+                if (runId is not null)
+                {
+                    await tracker.UpdateRunAsync(runId, _ => {}, phase: "ollama_classification", message: $"Running Ollama classification for video {videoId}...", ct: ct);
+                }
+
                 var allTags = await db.Tags.ToListAsync(ct);
                 var availableTagNames = allTags.Select(t => t.Name);
                 var ollamaSuggestions = await ollamaCategorizer.CategorizeAsync(context, availableTagNames, ct);
@@ -75,7 +86,16 @@ public class CategorizationPipeline(
         }
 
         if (merged.Count == 0)
+        {
+            if (runId is not null)
+            {
+                await tracker.UpdateRunAsync(runId, r => {
+                    r.VideosProcessed++;
+                    r.VideosSkipped++;
+                }, message: $"No tag suggestions found for video {videoId}.", ct: ct);
+            }
             return [];
+        }
 
         // Save suggestions as VideoTag records (skip existing)
         var existingKeys = video.VideoTags
@@ -94,10 +114,30 @@ public class CategorizationPipeline(
             })
             .ToList();
 
+        if (runId is not null)
+        {
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "writing_suggestions", message: $"Writing {toAdd.Count} tag suggestions for video {videoId}...", ct: ct);
+        }
+
         if (toAdd.Count > 0)
         {
             db.VideoTags.AddRange(toAdd);
             await db.SaveChangesAsync(ct);
+        }
+
+        if (runId is not null)
+        {
+            int ruleHits = merged.Count(s => s.Source == TagSource.RuleBased);
+            int tfidfHits = merged.Count(s => s.Source == TagSource.TfIdf);
+            int ollamaHits = merged.Count(s => s.Source == TagSource.Ollama);
+
+            await tracker.UpdateRunAsync(runId, r => {
+                r.VideosProcessed++;
+                r.VideosTagged++;
+                r.RuleBasedHits += ruleHits;
+                r.TfidfHits += tfidfHits;
+                r.OllamaHits += ollamaHits;
+            }, message: $"Saved {toAdd.Count} tag suggestions for video {videoId}.", ct: ct);
         }
 
         logger.LogInformation("Video {VideoId}: saved {Count} tag suggestions", videoId, toAdd.Count);
@@ -106,21 +146,43 @@ public class CategorizationPipeline(
 
     public async Task CategorizeNewVideosAsync(CancellationToken ct = default)
     {
-        var newVideoIds = await db.Videos
-            .Where(v => v.Status == VideoStatus.Active && !v.VideoTags.Any())
-            .Select(v => v.Id)
-            .ToListAsync(ct);
+        var runId = await tracker.StartRunAsync("categorization", ct);
 
-        foreach (var videoId in newVideoIds)
+        try
         {
-            try
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "loading_candidates", message: "Loading candidate videos pending tagging...", ct: ct);
+            var newVideoIds = await db.Videos
+                .Where(v => v.Status == VideoStatus.Active && !v.VideoTags.Any())
+                .Select(v => v.Id)
+                .ToListAsync(ct);
+
+            await tracker.UpdateRunAsync(runId, r => {
+                r.VideosPendingTagging = newVideoIds.Count;
+            }, message: $"Found {newVideoIds.Count} videos pending tagging.", ct: ct);
+
+            foreach (var videoId in newVideoIds)
             {
-                await CategorizeAsync(videoId, ct);
+                try
+                {
+                    await CategorizeAsync(videoId, runId, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to categorize video {VideoId}", videoId);
+                    await tracker.UpdateRunAsync(runId, r => {
+                        r.VideosProcessed++;
+                        r.ErrorsCount++;
+                    }, message: $"Error categorizing video {videoId}: {ex.Message}", ct: ct);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to categorize video {VideoId}", videoId);
-            }
+
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "finalizing", message: "Finalizing categorization run...", ct: ct);
+            await tracker.CompleteRunAsync(runId, null, ct);
+        }
+        catch (Exception ex)
+        {
+            await tracker.FailRunAsync(runId, ex.Message, null, ct);
+            throw;
         }
     }
 }

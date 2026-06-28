@@ -6,6 +6,8 @@ using Moq;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Exceptions;
 using PlaylistMiner.Core.Interfaces;
+using PlaylistMiner.Core.Models;
+using PlaylistMiner.Infrastructure.Data;
 
 namespace PlaylistMiner.IntegrationTests.Api;
 
@@ -39,6 +41,76 @@ public class UndoControllerTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<List<UndoLogDto>>();
         result.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Test_GetPending_WithRealRepository_ReturnsSeededUndoLogs()
+    {
+        // Arrange
+        using var factory = new PlaylistMinerWebAppFactory();
+        var client = factory.CreateClient();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PlaylistMinerDbContext>();
+
+            var source = new Playlist
+            {
+                YouTubeId = "PLsource",
+                Name = "Source",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                SyncedAt = DateTime.UtcNow
+            };
+            var target = new Playlist
+            {
+                YouTubeId = "PLtarget",
+                Name = "Target",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                SyncedAt = DateTime.UtcNow
+            };
+            var video = new Video
+            {
+                YouTubeId = "vid001",
+                Title = "Seeded Video",
+                Description = "desc",
+                ChannelName = "Channel",
+                ChannelId = "UC123",
+                ThumbnailUrl = "https://thumb.jpg",
+                Status = VideoStatus.Active,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                SyncedAt = DateTime.UtcNow
+            };
+
+            db.Playlists.AddRange(source, target);
+            db.Videos.Add(video);
+            await db.SaveChangesAsync();
+
+            db.UndoLogs.Add(new UndoLog
+            {
+                VideoId = video.Id,
+                Action = "move",
+                SourcePlaylistId = source.Id,
+                TargetPlaylistId = target.Id,
+                PerformedAt = DateTime.UtcNow.AddMinutes(-2),
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
+                Undone = false
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Act
+        var response = await client.GetAsync("/api/undo");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<List<UndoLogDto>>();
+        result.Should().ContainSingle();
+        result![0].VideoTitle.Should().Be("Seeded Video");
+        result[0].SourcePlaylistName.Should().Be("Source");
+        result[0].TargetPlaylistName.Should().Be("Target");
     }
 
     [Fact]

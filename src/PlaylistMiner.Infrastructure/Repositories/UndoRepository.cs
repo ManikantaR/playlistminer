@@ -14,6 +14,7 @@ public class UndoRepository(PlaylistMinerDbContext db) : IUndoRepository
         return await db.UndoLogs
             .AsNoTracking()
             .Where(ul => !ul.Undone && ul.ExpiresAt > now)
+            .OrderByDescending(ul => ul.PerformedAt)
             .Select(ul => new UndoLogDto(
                 ul.Id,
                 ul.VideoId,
@@ -25,7 +26,6 @@ public class UndoRepository(PlaylistMinerDbContext db) : IUndoRepository
                 ul.PerformedAt,
                 ul.ExpiresAt,
                 ul.Undone))
-            .OrderByDescending(ul => ul.CreatedAt)
             .ToListAsync(ct);
     }
 

@@ -54,8 +54,8 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5050}
     ports:
       - "${WEB_PORT:-3000}:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000}
+    # NEXT_PUBLIC_API_URL is consumed at BUILD time via build.args above; it has no effect
+    # as a runtime env var, so it is intentionally not set here.
     depends_on:
       - pm-api
 

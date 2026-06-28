@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
 
@@ -16,12 +15,12 @@ public class SyncControllerTests
     public async Task Test_TriggerSync_Returns202_Accepted()
     {
         // Arrange
-        var mockSync = new Mock<ISyncService>();
-        mockSync.Setup(s => s.FullSyncAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SyncResult(0, 0, [], 0));
+        var mockTrigger = new Mock<ISyncTrigger>();
+        mockTrigger.Setup(s => s.TriggerAsync("full", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         using var factory = new PlaylistMinerWebAppFactory(services =>
-            services.AddSingleton(mockSync.Object));
+            services.AddSingleton(mockTrigger.Object));
         var client = factory.CreateClient();
 
         // Act
@@ -29,13 +28,16 @@ public class SyncControllerTests
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        mockTrigger.Verify(s => s.TriggerAsync("full", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task Test_GetStatus_Returns200_WithCurrentStatus()
     {
         // Arrange
-        using var factory = new PlaylistMinerWebAppFactory();
+        var mockTrigger = new Mock<ISyncTrigger>();
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+            services.AddSingleton(mockTrigger.Object));
         var client = factory.CreateClient();
 
         // Act
@@ -49,7 +51,9 @@ public class SyncControllerTests
     public async Task Test_GetHistory_Returns200_WithSyncLogs()
     {
         // Arrange
-        using var factory = new PlaylistMinerWebAppFactory();
+        var mockTrigger = new Mock<ISyncTrigger>();
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+            services.AddSingleton(mockTrigger.Object));
         var client = factory.CreateClient();
 
         // Act

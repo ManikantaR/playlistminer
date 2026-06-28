@@ -37,6 +37,10 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IVideoService, VideoService>();
         services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
         services.AddScoped<IImportService, ImportService>();
+        services.AddScoped<ISyncTrigger, SyncTriggerService>();
+        services.AddScoped<IBackupService, BackupService>();
+        services.AddScoped<IProcessRunner, ProcessRunner>();
+        services.AddScoped<IPipelineRunTracker, PipelineRunTracker>();
         return services;
     }
 
@@ -105,11 +109,10 @@ public static class InfrastructureServiceExtensions
         IConfiguration configuration)
     {
         services.AddCategorizationEngine(configuration);
-
         services.AddScoped<ISyncTrigger, SyncTriggerService>();
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IProcessRunner, ProcessRunner>();
-
+        services.AddScoped<IPipelineRunTracker, PipelineRunTracker>();
         return services;
     }
 }

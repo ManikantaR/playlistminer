@@ -11,16 +11,14 @@ builder.AddNpgsqlDbContext<PlaylistMinerDbContext>("playlistminer");
 builder.Services.AddYouTubeIntegration(builder.Configuration);
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// Quartz scheduler
+// Quartz scheduler.
+// In-memory (RAM) job store: all jobs below are code-defined cron triggers re-registered
+// on every startup, and on-demand sync uses the SyncRequest DB table (not Quartz), so a
+// persistent store adds schema-provisioning overhead with no real benefit here. If misfire
+// durability across restarts is ever needed, switch back to UsePersistentStore + UsePostgres
+// AND provision the qrtz_* schema (Quartz tables_postgres.sql, via an EF migration).
 builder.Services.AddQuartz(q =>
 {
-    q.UsePersistentStore(s =>
-    {
-        s.UsePostgres(o =>
-            o.ConnectionString = builder.Configuration.GetConnectionString("playlistminer") ?? string.Empty);
-        s.UseNewtonsoftJsonSerializer();
-    });
-
     void AddJob<T>(string defaultCron, string configKey, string jobKey) where T : IJob
     {
         var key = new JobKey(jobKey);

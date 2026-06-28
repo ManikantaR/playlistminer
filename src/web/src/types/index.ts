@@ -41,6 +41,7 @@ export interface TagRule {
 }
 
 export interface Playlist {
+  id: number;
   youTubeId: string;
   name: string;
   description: string | null;
@@ -91,4 +92,70 @@ export interface ImportResult {
   skipped: number;
   errors: number;
   batchId: string;
+}
+
+export interface PipelineRun {
+  runId: string;
+  pipelineType: string;
+  status: string;
+  phase: string;
+  startedAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  currentMessage: string | null;
+  error: string | null;
+
+  // Sync counters
+  playlistsDiscovered: number;
+  playlistsProcessed: number;
+  playlistItemsFetched: number;
+  uniqueVideoIdsIdentified: number;
+  videoMetadataBatchesTotal: number;
+  videoMetadataBatchesCompleted: number;
+  videosUpserted: number;
+  playlistVideoLinksWritten: number;
+  videosArchived: number;
+  videosDeferred: number;
+  errorsCount: number;
+
+  // Categorization counters
+  videosPendingTagging: number;
+  videosProcessed: number;
+  videosTagged: number;
+  videosSkipped: number;
+  ruleBasedHits: number;
+  tfidfHits: number;
+  ollamaHits: number;
+  isStalled?: boolean;
+}
+
+export interface PipelineEvent {
+  id: number;
+  runId: string;
+  occurredAt: string;
+  level: string;
+  phase: string;
+  message: string;
+  payloadJson: string | null;
+}
+
+export interface DependencyHealth {
+  database: string;
+  oauthConnected: boolean;
+  youtubeQuotaAvailable: boolean;
+  ollamaReachable: boolean;
+  workerStatus: string;
+  workerLastHeartbeat: string | null;
+}
+
+export interface OperationsHealth {
+  apiHealthy: boolean;
+  dbHealthy: boolean;
+  workerHealthy: boolean;
+  workerHeartbeatAgeSeconds: number;
+  oauthConnected: boolean;
+  quotaExhausted: boolean;
+  ollamaReachable: boolean;
+  activeRunStalled: boolean;
+  activeRunPhase: string | null;
 }

@@ -8,10 +8,10 @@
     <RootNamespace>$(MSBuildProjectName.Replace("-", "_"))</RootNamespace>
   </PropertyGroup>
 
-  <!-- Suppress known moderate vulnerabilities in transitive dependencies we cannot upgrade -->
-  <PropertyGroup>
-    <NuGetAuditSuppress>
-      https://github.com/advisories/GHSA-w7r3-mgwf-4mqq;
-    </NuGetAuditSuppress>
-  </PropertyGroup>
+  <!-- Force MessagePack to patched version to resolve known CVEs pulled in transitively by Aspire.
+       Aspire 13.x pulls MessagePack 2.5.192 which has multiple known vulnerabilities.
+       Override to 3.1.7 which resolves all known CVEs as of June 2026. -->
+  <ItemGroup>
+    <PackageReference Include="MessagePack" Version="3.1.7" />
+  </ItemGroup>
 </Project>

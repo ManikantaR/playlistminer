@@ -1,0 +1,26 @@
+# How PlaylistMiner deploys to the home-lab NAS. Read by the `homelab-deploy` Claude skill.
+name: playlistminer
+subdomain: playlistminer              # https://playlistminer.home.manikantar.com
+group: Applications
+icon: mdi-playlist-music
+description: Playlist miner
+
+# Central compose lives on the NAS; builds from this repo synced to /volume1/docker/playlistminer/repo
+compose: /volume1/docker/docker-compose.playlistminer.yml
+deploy_cmd: ./deploy-to-nas.sh
+
+web_service: pm-web                   # container pm-web
+web_port: 3000
+api:
+  service: pm-api                     # container pm-api
+  port: 8080
+
+build_args:
+  NEXT_PUBLIC_API_URL: https://playlistminer.home.manikantar.com
+
+data_dir: /volume1/docker/playlistminer   # pg, backup, concepts
+databases:
+  - container: pm-db
+    type: postgres                    # ⚠ NOT yet in kopia-backup.sh dump list — should be added (currently only file-snapshotted)
+workers:
+  - pm-worker                         # container pm-worker (background)

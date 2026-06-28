@@ -82,4 +82,22 @@ public class SyncTriggerServiceTests
         request.Status.Should().Be("completed");
         request.CompletedAt.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task Test_MarkProcessing_SetsStartedAt()
+    {
+        // Arrange
+        using var db = CreateDb();
+        var service = new SyncTriggerService(db);
+        await service.TriggerAsync("full");
+        var request = await db.SyncRequests.FirstAsync();
+
+        // Act
+        await service.MarkProcessingAsync(request.Id);
+
+        // Assert
+        await db.Entry(request).ReloadAsync();
+        request.Status.Should().Be("processing");
+        request.StartedAt.Should().NotBeNull();
+    }
 }
