@@ -41,6 +41,7 @@ export interface TagRule {
 }
 
 export interface Playlist {
+  id: number;
   youTubeId: string;
   name: string;
   description: string | null;

@@ -12,6 +12,7 @@ public sealed class SyncService(
     IYouTubeApiClient youTubeApiClient,
     IQuotaTracker quotaTracker,
     PlaylistMinerDbContext db,
+    IPipelineRunTracker tracker,
     ILogger<SyncService> logger) : ISyncService
 {
     public async Task<SyncResult> FullSyncAsync(CancellationToken ct = default)
@@ -32,6 +33,8 @@ public sealed class SyncService(
             return new SyncResult(0, 0, ["YouTube API quota exhausted for today. Will resume after midnight Pacific."], 0);
         }
 
+        var runId = await tracker.StartRunAsync("sync", ct);
+
         var syncLog = new SyncLog
         {
             SyncType = syncInboxOnly ? "Inbox" : "Full",
@@ -50,7 +53,11 @@ public sealed class SyncService(
         try
         {
             // 1. Fetch playlists from YouTube API
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "fetching_playlists", message: "Fetching user playlists from YouTube API...", ct: ct);
             var apiPlaylists = await youTubeApiClient.GetUserPlaylistsAsync(ct);
+            await tracker.UpdateRunAsync(runId, r => {
+                r.PlaylistsDiscovered = apiPlaylists.Count;
+            }, message: $"Discovered {apiPlaylists.Count} playlists.", ct: ct);
 
             // 2. Determine which playlists to sync
             List<PlaylistDto> playlistsToSync;
@@ -82,6 +89,7 @@ public sealed class SyncService(
             }
 
             // 4. For each playlist, collect all video IDs
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "fetching_playlist_items", message: "Fetching playlist items from YouTube API...", ct: ct);
             var allVideoIds = new HashSet<string>();
             var playlistItems = new Dictionary<string, List<PlaylistItemDto>>();
 
@@ -91,13 +99,38 @@ public sealed class SyncService(
                 playlistItems[playlist.YouTubeId] = items;
                 foreach (var item in items)
                     allVideoIds.Add(item.VideoId);
+
+                await tracker.UpdateRunAsync(runId, r => {
+                    r.PlaylistsProcessed++;
+                    r.PlaylistItemsFetched += items.Count;
+                }, message: $"Fetched {items.Count} items from playlist {playlist.Name} (YouTube ID: {playlist.YouTubeId}).", ct: ct);
             }
 
+            await tracker.UpdateRunAsync(runId, r => {
+                r.UniqueVideoIdsIdentified = allVideoIds.Count;
+            }, message: $"Identified {allVideoIds.Count} unique video IDs to fetch metadata for.", ct: ct);
+
             // 5. Batch-fetch video metadata
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "hydrating_video_metadata", message: "Hydrating video metadata in batches of 50...", ct: ct);
             List<VideoMetadataDto> videoMetadata;
             try
             {
-                videoMetadata = await youTubeApiClient.GetVideoMetadataAsync(allVideoIds, ct);
+                var metadataList = new List<VideoMetadataDto>();
+                var batches = allVideoIds.Chunk(50).ToList();
+                await tracker.UpdateRunAsync(runId, r => {
+                    r.VideoMetadataBatchesTotal = batches.Count;
+                    r.VideoMetadataBatchesCompleted = 0;
+                }, ct: ct);
+
+                foreach (var batch in batches)
+                {
+                    var batchMetadata = await youTubeApiClient.GetVideoMetadataAsync(batch, ct);
+                    metadataList.AddRange(batchMetadata);
+                    await tracker.UpdateRunAsync(runId, r => {
+                        r.VideoMetadataBatchesCompleted++;
+                    }, message: $"Completed metadata batch {metadataList.Count / 50 + (metadataList.Count % 50 > 0 ? 1 : 0)} of {batches.Count}.", ct: ct);
+                }
+                videoMetadata = metadataList;
             }
             catch (QuotaExhaustedException ex)
             {
@@ -112,36 +145,67 @@ public sealed class SyncService(
                 syncLog.Errors = string.Join("; ", errors);
                 await db.SaveChangesAsync(ct);
 
+                await tracker.DeferRunAsync(runId, ex.Message, r => {
+                    r.VideosDeferred = deferredCount;
+                    r.ErrorsCount++;
+                }, ct: ct);
+
                 return new SyncResult(0, 0, errors, deferredCount);
             }
 
             // 6. Upsert videos
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "upserting_videos", message: "Upserting video records...", ct: ct);
             var metadataByYouTubeId = videoMetadata.ToDictionary(v => v.YouTubeId);
 
             foreach (var meta in videoMetadata)
             {
                 await UpsertVideoAsync(meta, ct);
                 videosProcessed++;
+                if (videosProcessed % 10 == 0 || videosProcessed == videoMetadata.Count)
+                {
+                    await tracker.UpdateRunAsync(runId, r => {
+                        r.VideosUpserted = videosProcessed;
+                        r.VideosProcessed = videosProcessed;
+                    }, message: $"Upserted {videosProcessed} of {videoMetadata.Count} videos.", ct: ct);
+                }
             }
 
             // 7. Mark videos not in API response as Archived (if they were Active)
+            int archivedCount = 0;
             if (!syncInboxOnly)
             {
+                var activeIdSet = metadataByYouTubeId.Keys.ToHashSet();
+                var toArchive = await db.Videos
+                    .Where(v => v.Status == VideoStatus.Active && !activeIdSet.Contains(v.YouTubeId))
+                    .ToListAsync(ct);
+                archivedCount = toArchive.Count;
+
                 await MarkMissingVideosArchivedAsync(metadataByYouTubeId.Keys, ct);
             }
 
             // 8. Upsert PlaylistVideo associations
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "linking_playlist_items", message: "Linking playlist videos...", ct: ct);
+            int linksWritten = 0;
             foreach (var (playlistYouTubeId, items) in playlistItems)
             {
                 await UpsertPlaylistVideosAsync(playlistYouTubeId, items, metadataByYouTubeId, ct);
+                linksWritten += items.Count;
             }
 
+            await tracker.UpdateRunAsync(runId, r => {
+                r.PlaylistVideoLinksWritten = linksWritten;
+                r.VideosArchived = archivedCount;
+            }, message: $"Linked {linksWritten} playlist items.", ct: ct);
+
             // 9. Complete sync log
+            await tracker.UpdateRunAsync(runId, _ => {}, phase: "finalizing", message: "Finalizing sync run...", ct: ct);
             syncLog.Status = "Completed";
             syncLog.CompletedAt = DateTime.UtcNow;
             syncLog.VideosProcessed = videosProcessed;
             syncLog.Errors = errors.Count > 0 ? string.Join("; ", errors) : null;
             await db.SaveChangesAsync(ct);
+
+            await tracker.CompleteRunAsync(runId, null, ct: ct);
 
             return new SyncResult(videosProcessed, 0, errors, 0);
         }
@@ -153,6 +217,11 @@ public sealed class SyncService(
             syncLog.CompletedAt = DateTime.UtcNow;
             syncLog.Errors = string.Join("; ", errors);
             await db.SaveChangesAsync(ct);
+
+            await tracker.FailRunAsync(runId, ex.Message, r => {
+                r.ErrorsCount++;
+            }, ct: ct);
+
             throw;
         }
     }

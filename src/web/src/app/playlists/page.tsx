@@ -11,7 +11,7 @@ export default function PlaylistsPage() {
   const { data: playlists, isLoading } = usePlaylists();
   const qc = useQueryClient();
 
-  const setAsInbox = async (playlistId: string) => {
+  const setAsInbox = async (playlistId: number) => {
     try {
       await apiPost(`/api/playlists/${playlistId}/inbox`);
       await qc.invalidateQueries({ queryKey: ['playlists'] });
@@ -47,7 +47,7 @@ export default function PlaylistsPage() {
           </div>
           {!pl.isInbox && (
             <button
-              onClick={() => setAsInbox(pl.youTubeId)}
+              onClick={() => setAsInbox(pl.id)}
               className="text-sm text-blue-600 hover:underline"
             >
               Set as Inbox

@@ -7,6 +7,7 @@ using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
 using PlaylistMiner.Infrastructure.Categorization;
 using PlaylistMiner.Infrastructure.Data;
+using PlaylistMiner.Infrastructure.Services;
 
 namespace PlaylistMiner.UnitTests.Categorization;
 
@@ -53,7 +54,7 @@ public class CategorizationPipelineTests
         var ollamaMock = ollama ?? Mock.Of<IOllamaCategorizer>(m =>
             m.IsAvailableAsync(It.IsAny<CancellationToken>()) == Task.FromResult(false));
 
-        return new CategorizationPipeline(keywordMock, tfidfMock, ollamaMock, db, NullLogger<CategorizationPipeline>.Instance);
+        return new CategorizationPipeline(keywordMock, tfidfMock, ollamaMock, db, new PipelineRunTracker(db), NullLogger<CategorizationPipeline>.Instance);
     }
 
     [Fact]

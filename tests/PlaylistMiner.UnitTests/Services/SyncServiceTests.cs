@@ -64,7 +64,7 @@ public class SyncServiceTests
             .ReturnsAsync((IEnumerable<string> ids, CancellationToken _) =>
                 ids.Select(MakeVideo).ToList());
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         await service.FullSyncAsync();
@@ -87,7 +87,7 @@ public class SyncServiceTests
         apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([MakeVideo("vidNEW")]);
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         await service.FullSyncAsync();
@@ -129,7 +129,7 @@ public class SyncServiceTests
         apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([MakeVideo("vidNEW")]);
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         await service.FullSyncAsync();
@@ -171,7 +171,7 @@ public class SyncServiceTests
         apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([MakeVideo("vidSAME")]); // same title
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         var result = await service.FullSyncAsync();
@@ -194,7 +194,7 @@ public class SyncServiceTests
         apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         await service.FullSyncAsync();
@@ -222,7 +222,7 @@ public class SyncServiceTests
         apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new QuotaExhaustedException());
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         var result = await service.FullSyncAsync();
@@ -268,7 +268,7 @@ public class SyncServiceTests
         apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IEnumerable<string> ids, CancellationToken _) => ids.Select(MakeVideo).ToList());
 
-        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, NullLogger<SyncService>.Instance);
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
 
         // Act
         await service.SyncInboxAsync();
@@ -280,5 +280,42 @@ public class SyncServiceTests
         apiMock.Verify(
             a => a.GetPlaylistItemsAsync("PLdef", It.IsAny<CancellationToken>()),
             Times.Never());
+    }
+
+    [Fact]
+    public async Task Test_FullSync_CreatesPipelineRunAndEvents()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var apiMock = new Mock<IYouTubeApiClient>();
+        apiMock.Setup(a => a.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SamplePlaylists());
+        apiMock.Setup(a => a.GetPlaylistItemsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) => SampleItems(id));
+        apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<string> ids, CancellationToken _) =>
+                ids.Select(MakeVideo).ToList());
+
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
+
+        // Act
+        await service.FullSyncAsync();
+
+        // Assert
+        var run = await db.PipelineRuns.FirstOrDefaultAsync();
+        run.Should().NotBeNull();
+        run!.PipelineType.Should().Be("sync");
+        run.Status.Should().Be("completed");
+        run.Phase.Should().Be("completed");
+        run.PlaylistsDiscovered.Should().Be(2);
+        run.PlaylistsProcessed.Should().Be(2);
+        run.PlaylistItemsFetched.Should().Be(3);
+        run.UniqueVideoIdsIdentified.Should().Be(3);
+        run.VideosUpserted.Should().Be(3);
+
+        var events = await db.PipelineEvents.ToListAsync();
+        events.Should().NotBeEmpty();
+        events.First().Phase.Should().Be("starting");
+        events.Last().Phase.Should().Be("completed");
     }
 }

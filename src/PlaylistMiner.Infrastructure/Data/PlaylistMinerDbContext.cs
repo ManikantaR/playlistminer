@@ -17,6 +17,8 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<SyncRequest> SyncRequests => Set<SyncRequest>();
     public DbSet<BackupLog> BackupLogs => Set<BackupLog>();
+    public DbSet<PipelineRun> PipelineRuns => Set<PipelineRun>();
+    public DbSet<PipelineEvent> PipelineEvents => Set<PipelineEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +36,8 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
         ConfigureSetting(modelBuilder);
         ConfigureSyncRequest(modelBuilder);
         ConfigureBackupLog(modelBuilder);
+        ConfigurePipelineRun(modelBuilder);
+        ConfigurePipelineEvent(modelBuilder);
 
         SeedData.Apply(modelBuilder);
     }
@@ -279,6 +283,67 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
             entity.Property(bl => bl.CreatedAt).HasColumnName("created_at").IsRequired();
             entity.Property(bl => bl.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
             entity.Property(bl => bl.Error).HasColumnName("error");
+        });
+    }
+
+    private static void ConfigurePipelineRun(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PipelineRun>(entity =>
+        {
+            entity.ToTable("pipeline_runs");
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            entity.Property(r => r.RunId).HasColumnName("run_id").HasMaxLength(100).IsRequired();
+            entity.Property(r => r.PipelineType).HasColumnName("pipeline_type").HasMaxLength(50).IsRequired();
+            entity.Property(r => r.Status).HasColumnName("status").HasMaxLength(50).IsRequired();
+            entity.Property(r => r.Phase).HasColumnName("phase").HasMaxLength(100).IsRequired();
+            entity.Property(r => r.StartedAt).HasColumnName("started_at").IsRequired();
+            entity.Property(r => r.UpdatedAt).HasColumnName("updated_at").IsRequired();
+            entity.Property(r => r.CompletedAt).HasColumnName("completed_at");
+            entity.Property(r => r.CurrentMessage).HasColumnName("current_message").HasMaxLength(1000);
+            entity.Property(r => r.Error).HasColumnName("error");
+
+            // Sync counters
+            entity.Property(r => r.PlaylistsDiscovered).HasColumnName("playlists_discovered").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.PlaylistsProcessed).HasColumnName("playlists_processed").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.PlaylistItemsFetched).HasColumnName("playlist_items_fetched").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.UniqueVideoIdsIdentified).HasColumnName("unique_video_ids_identified").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideoMetadataBatchesTotal).HasColumnName("video_metadata_batches_total").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideoMetadataBatchesCompleted).HasColumnName("video_metadata_batches_completed").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideosUpserted).HasColumnName("videos_upserted").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.PlaylistVideoLinksWritten).HasColumnName("playlist_video_links_written").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideosArchived).HasColumnName("videos_archived").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideosDeferred).HasColumnName("videos_deferred").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.ErrorsCount).HasColumnName("errors_count").HasDefaultValue(0).IsRequired();
+
+            // Categorization counters
+            entity.Property(r => r.VideosPendingTagging).HasColumnName("videos_pending_tagging").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideosProcessed).HasColumnName("videos_processed").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideosTagged).HasColumnName("videos_tagged").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.VideosSkipped).HasColumnName("videos_skipped").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.RuleBasedHits).HasColumnName("rule_based_hits").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.TfidfHits).HasColumnName("tfidf_hits").HasDefaultValue(0).IsRequired();
+            entity.Property(r => r.OllamaHits).HasColumnName("ollama_hits").HasDefaultValue(0).IsRequired();
+
+            entity.HasIndex(r => r.RunId).IsUnique().HasDatabaseName("ix_pipeline_runs_run_id");
+        });
+    }
+
+    private static void ConfigurePipelineEvent(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PipelineEvent>(entity =>
+        {
+            entity.ToTable("pipeline_events");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            entity.Property(e => e.RunId).HasColumnName("run_id").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.OccurredAt).HasColumnName("occurred_at").IsRequired();
+            entity.Property(e => e.Level).HasColumnName("level").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Phase).HasColumnName("phase").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Message).HasColumnName("message").HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.PayloadJson).HasColumnName("payload_json");
+
+            entity.HasIndex(e => e.RunId).HasDatabaseName("ix_pipeline_events_run_id");
         });
     }
 }

@@ -10,6 +10,7 @@ namespace PlaylistMiner.IntegrationTests.Api;
 public class PlaylistMinerWebAppFactory : WebApplicationFactory<Program>
 {
     private readonly Action<IServiceCollection>? _configureServices;
+    private readonly string _databaseName = "TestDb_" + Guid.NewGuid();
 
     public PlaylistMinerWebAppFactory(Action<IServiceCollection>? configureServices = null)
     {
@@ -51,7 +52,7 @@ public class PlaylistMinerWebAppFactory : WebApplicationFactory<Program>
 
             // Register a fresh InMemory DbContext per-test
             services.AddDbContext<PlaylistMinerDbContext>(opts =>
-                opts.UseInMemoryDatabase("TestDb_" + Guid.NewGuid()),
+                opts.UseInMemoryDatabase(_databaseName),
                 ServiceLifetime.Scoped);
 
             _configureServices?.Invoke(services);

@@ -119,6 +119,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
     {
         var idList = videoIds.ToList();
         var results = new List<VideoMetadataDto>();
+        var token = await _tokenProvider.GetAccessTokenAsync(ct);
 
         foreach (var batch in idList.Chunk(50))
         {
@@ -129,10 +130,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
             ]);
 
             var response = await ExecuteWithRateLimitAsync(() =>
-            {
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                return _httpClient.SendAsync(request, ct);
-            }, ct);
+                SendWithTokenAsync(HttpMethod.Get, url, token, null, ct), ct);
 
             await EnsureSuccessOrThrowAsync(response, ct);
 
@@ -271,7 +269,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
             p.Snippet.Title,
             p.Snippet.Description,
             IsInbox: false,
-            ItemCount: int.TryParse(p.ContentDetails?.ItemCount, out var n) ? n : 0);
+            ItemCount: p.ContentDetails?.ItemCount ?? 0);
 
     private static PlaylistItemDto MapPlaylistItem(YouTubePlaylistItem i) =>
         new(
@@ -418,7 +416,8 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
     private sealed record YouTubeContentDetails
     {
         [JsonPropertyName("itemCount")]
-        public string? ItemCount { get; init; }
+        [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+        public int? ItemCount { get; init; }
 
         [JsonPropertyName("duration")]
         public string? Duration { get; init; }

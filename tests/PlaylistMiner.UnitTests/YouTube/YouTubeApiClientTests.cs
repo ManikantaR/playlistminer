@@ -113,6 +113,45 @@ public class YouTubeApiClientTests
     }
 
     [Fact]
+    public async Task Test_GetUserPlaylists_HandlesNumericItemCount()
+    {
+        // Arrange
+        const string json = """
+            {
+                "items": [
+                    {
+                        "id": "PLnumeric",
+                        "snippet": {
+                            "title": "Numeric Playlist",
+                            "description": "A live-shaped playlist response"
+                        },
+                        "contentDetails": {
+                            "itemCount": 12
+                        }
+                    }
+                ]
+            }
+            """;
+
+        var handlerMock = CreateHandlerMock();
+        SetupHandlerResponse(handlerMock, HttpStatusCode.OK, json);
+
+        var client = new YouTubeApiClient(
+            CreateHttpClient(handlerMock),
+            CreateTokenProviderMock().Object,
+            quotaTracker: null,
+            ResiliencePipeline<HttpResponseMessage>.Empty);
+
+        // Act
+        var result = await client.GetUserPlaylistsAsync();
+
+        // Assert
+        result.Should().HaveCount(1);
+        result[0].YouTubeId.Should().Be("PLnumeric");
+        result[0].ItemCount.Should().Be(12);
+    }
+
+    [Fact]
     public async Task Test_GetPlaylistItems_PaginatesCorrectly()
     {
         // Arrange
@@ -195,7 +234,10 @@ public class YouTubeApiClientTests
             .Protected()
             .Setup<Task<HttpResponseMessage>>(
                 "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.Is<HttpRequestMessage>(r =>
+                    r.Headers.Authorization != null &&
+                    r.Headers.Authorization.Scheme == "Bearer" &&
+                    r.Headers.Authorization.Parameter == "test-token"),
                 ItExpr.IsAny<CancellationToken>())
             .ReturnsAsync(() =>
             {

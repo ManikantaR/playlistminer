@@ -9,25 +9,16 @@ namespace PlaylistMiner.Api.Controllers;
 [ApiController]
 [Route("api/sync")]
 public class SyncController(
-    ISyncService syncService,
+    ISyncTrigger syncTrigger,
     PlaylistMinerDbContext db,
     ILogger<SyncController> logger) : ControllerBase
 {
     [HttpPost("trigger")]
     [ProducesResponseType(StatusCodes.Status202Accepted)]
-    public IActionResult TriggerAsync(CancellationToken ct = default)
+    public async Task<IActionResult> TriggerAsync(CancellationToken ct = default)
     {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await syncService.FullSyncAsync(CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Background sync failed.");
-            }
-        }, ct);
+        await syncTrigger.TriggerAsync("full", ct);
+        logger.LogInformation("Queued manual full sync request.");
 
         return Accepted(new { message = "Sync triggered." });
     }
