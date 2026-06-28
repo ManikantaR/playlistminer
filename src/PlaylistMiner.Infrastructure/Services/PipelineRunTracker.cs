@@ -151,7 +151,11 @@ public class PipelineRunTracker(PlaylistMinerDbContext db) : IPipelineRunTracker
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task RecordWorkerHeartbeatAsync(CancellationToken ct = default)
+    public async Task RecordWorkerHeartbeatAsync(
+        string? workerInstance = null,
+        string? hostEnvironment = null,
+        string? activeJobType = null,
+        CancellationToken ct = default)
     {
         var run = await db.PipelineRuns.FirstOrDefaultAsync(r => r.RunId == "worker-heartbeat", ct);
         var now = DateTime.UtcNow;
@@ -164,13 +168,19 @@ public class PipelineRunTracker(PlaylistMinerDbContext db) : IPipelineRunTracker
                 Status = "active",
                 Phase = "heartbeat",
                 StartedAt = now,
-                UpdatedAt = now
+                UpdatedAt = now,
+                WorkerInstance = workerInstance,
+                HostEnvironment = hostEnvironment,
+                ActiveJobType = activeJobType
             };
             db.PipelineRuns.Add(run);
         }
         else
         {
             run.UpdatedAt = now;
+            run.WorkerInstance = workerInstance;
+            run.HostEnvironment = hostEnvironment;
+            run.ActiveJobType = activeJobType;
         }
         await db.SaveChangesAsync(ct);
     }

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Models;
+using Microsoft.Extensions.Configuration;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Infrastructure.Data;
 
@@ -20,7 +21,8 @@ public class PipelineController(
     ITokenProvider tokenProvider,
     IQuotaTracker quotaTracker,
     IOllamaCategorizer ollamaCategorizer,
-    IPipelineRunTracker pipelineRunTracker) : ControllerBase
+    IPipelineRunTracker pipelineRunTracker,
+    IConfiguration configuration) : ControllerBase
 {
     [HttpGet("health")]
     [ProducesResponseType<DependencyHealthDto>(StatusCodes.Status200OK)]
@@ -64,7 +66,8 @@ public class PipelineController(
             return new OkObjectResult(new { }) { StatusCode = StatusCodes.Status200OK };
         }
 
-        return Ok(MapToDto(latest));
+        var stallThreshold = configuration.GetValue<int>("Pipeline:StallThresholdSeconds", 300);
+        return Ok(MapToDto(latest, stallThreshold));
     }
 
     [HttpGet("history")]
@@ -75,10 +78,12 @@ public class PipelineController(
             .AsNoTracking()
             .OrderByDescending(r => r.StartedAt)
             .Take(50)
-            .Select(r => MapToDto(r))
             .ToListAsync(ct);
 
-        return Ok(runs);
+        var stallThreshold = configuration.GetValue<int>("Pipeline:StallThresholdSeconds", 300);
+        var dtos = runs.Select(r => MapToDto(r, stallThreshold)).ToList();
+
+        return Ok(dtos);
     }
 
     [HttpGet("history/{runId}")]
@@ -95,7 +100,8 @@ public class PipelineController(
             return NotFound(new { message = $"Pipeline run with ID '{runId}' not found." });
         }
 
-        return Ok(MapToDto(run));
+        var stallThreshold = configuration.GetValue<int>("Pipeline:StallThresholdSeconds", 300);
+        return Ok(MapToDto(run, stallThreshold));
     }
 
     [HttpGet("events")]
@@ -112,8 +118,10 @@ public class PipelineController(
         return Ok(events);
     }
 
-    private static PipelineRunDto MapToDto(PipelineRun run) =>
-        new(
+    private static PipelineRunDto MapToDto(PipelineRun run, int stallThresholdSeconds)
+    {
+        var isStalled = run.Status == "in_progress" && (DateTime.UtcNow - run.UpdatedAt).TotalSeconds > stallThresholdSeconds;
+        return new(
             run.RunId,
             run.PipelineType,
             run.Status,
@@ -140,8 +148,10 @@ public class PipelineController(
             run.VideosSkipped,
             run.RuleBasedHits,
             run.TfidfHits,
-            run.OllamaHits
+            run.OllamaHits,
+            isStalled
         );
+    }
 
     private static PipelineEventDto MapEventToDto(PipelineEvent e) =>
         new(

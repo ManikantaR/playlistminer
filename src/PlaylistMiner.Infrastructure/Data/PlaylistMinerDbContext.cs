@@ -302,6 +302,9 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
             entity.Property(r => r.CompletedAt).HasColumnName("completed_at");
             entity.Property(r => r.CurrentMessage).HasColumnName("current_message").HasMaxLength(1000);
             entity.Property(r => r.Error).HasColumnName("error");
+            entity.Property(r => r.WorkerInstance).HasColumnName("worker_instance").HasMaxLength(100);
+            entity.Property(r => r.HostEnvironment).HasColumnName("host_environment").HasMaxLength(100);
+            entity.Property(r => r.ActiveJobType).HasColumnName("active_job_type").HasMaxLength(100);
 
             // Sync counters
             entity.Property(r => r.PlaylistsDiscovered).HasColumnName("playlists_discovered").HasDefaultValue(0).IsRequired();

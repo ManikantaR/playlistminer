@@ -126,6 +126,7 @@ export interface PipelineRun {
   ruleBasedHits: number;
   tfidfHits: number;
   ollamaHits: number;
+  isStalled?: boolean;
 }
 
 export interface PipelineEvent {
@@ -145,4 +146,16 @@ export interface DependencyHealth {
   ollamaReachable: boolean;
   workerStatus: string;
   workerLastHeartbeat: string | null;
+}
+
+export interface OperationsHealth {
+  apiHealthy: boolean;
+  dbHealthy: boolean;
+  workerHealthy: boolean;
+  workerHeartbeatAgeSeconds: number;
+  oauthConnected: boolean;
+  quotaExhausted: boolean;
+  ollamaReachable: boolean;
+  activeRunStalled: boolean;
+  activeRunPhase: string | null;
 }

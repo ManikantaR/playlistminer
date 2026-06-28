@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePipelineStatus, usePipelineHistory, usePipelineEvents, usePipelineHealth } from '@/hooks/usePipeline';
+import { usePipelineStatus, usePipelineHistory, usePipelineEvents, usePipelineHealth, useOperationsHealth } from '@/hooks/usePipeline';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import {
@@ -10,6 +10,7 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
+  AlertCircle,
   Database,
   Key,
   ShieldCheck,
@@ -24,6 +25,7 @@ export default function OperationsPage() {
   const { data: activeRun, refetch: refetchStatus } = usePipelineStatus();
   const { data: history, refetch: refetchHistory } = usePipelineHistory();
   const { data: health, refetch: refetchHealth } = usePipelineHealth();
+  const { data: opsHealth, refetch: refetchOpsHealth } = useOperationsHealth();
 
   // If there's an active run, we fetch events for it. Otherwise, we fetch events for the latest run.
   const selectedRunId = activeRun?.runId;
@@ -60,6 +62,7 @@ export default function OperationsPage() {
     refetchStatus();
     refetchHistory();
     refetchHealth();
+    refetchOpsHealth();
     if (selectedRunId) refetchEvents();
   };
 
@@ -106,6 +109,63 @@ export default function OperationsPage() {
     return `Processed: ${run.videosProcessed} • Tagged: ${run.videosTagged} • Skipped: ${run.videosSkipped}`;
   };
 
+  const getBannerState = () => {
+    if (opsHealth) {
+      if (!opsHealth.dbHealthy || !opsHealth.workerHealthy) {
+        return {
+          title: 'Dependency Unavailable',
+          message: 'The background worker process or database is offline. Please check your hosting deployment.',
+          bg: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-900/50 dark:text-gray-200 dark:border-gray-800',
+          icon: <AlertTriangle className="w-5 h-5 text-gray-500 animate-pulse" />
+        };
+      }
+      if (opsHealth.quotaExhausted) {
+        return {
+          title: 'YouTube API Quota Blocked',
+          message: 'Daily YouTube API quota has been exhausted. Background processes are paused and will defer until tomorrow.',
+          bg: 'bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-950/20 dark:text-orange-300 dark:border-orange-900/50',
+          icon: <AlertTriangle className="w-5 h-5 text-orange-500" />
+        };
+      }
+      if (opsHealth.activeRunStalled) {
+        return {
+          title: 'System Stalled',
+          message: `The active run in phase "${opsHealth.activeRunPhase || 'unknown'}" has stalled (no updates written recently).`,
+          bg: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/50 animate-pulse',
+          icon: <AlertCircle className="w-5 h-5 text-red-500 animate-bounce" />
+        };
+      }
+    }
+
+    if (activeRun) {
+      if (activeRun.status === 'failed') {
+        return {
+          title: 'Pipeline Run Failed',
+          message: `The last background operation failed: "${activeRun.error || 'Unknown error'}".`,
+          bg: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/50',
+          icon: <XCircle className="w-5 h-5 text-red-500" />
+        };
+      }
+      if (activeRun.status === 'in_progress' || activeRun.status === 'pending') {
+        return {
+          title: 'System Processing',
+          message: `Currently executing: ${activeRun.pipelineType === 'sync' ? 'Sync Job' : 'Categorization Job'} (Phase: ${activeRun.phase}).`,
+          bg: 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-900/50',
+          icon: <Activity className="w-5 h-5 text-blue-500 animate-spin" />
+        };
+      }
+    }
+
+    return {
+      title: 'System Healthy & Idle',
+      message: 'All core dependencies are healthy and background tasks are ready.',
+      bg: 'bg-green-50 text-green-800 border-green-200 dark:bg-green-950/20 dark:text-green-300 dark:border-green-900/50',
+      icon: <CheckCircle className="w-5 h-5 text-green-500" />
+    };
+  };
+
+  const banner = getBannerState();
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Title Header */}
@@ -118,6 +178,15 @@ export default function OperationsPage() {
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
         </Button>
+      </div>
+
+      {/* Operations Status Banner */}
+      <div className={`p-4 border rounded-lg flex items-start gap-3 ${banner.bg}`}>
+        <div className="mt-0.5 shrink-0">{banner.icon}</div>
+        <div>
+          <h4 className="font-semibold text-sm capitalize">{banner.title}</h4>
+          <p className="text-xs mt-1 text-gray-600 dark:text-gray-400">{banner.message}</p>
+        </div>
       </div>
 
       {/* Top Grid: Health Status & Active Task */}

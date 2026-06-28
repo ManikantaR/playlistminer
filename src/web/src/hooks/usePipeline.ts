@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api-client';
-import type { PipelineRun, PipelineEvent, DependencyHealth } from '@/types';
+import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth } from '@/types';
 
 export function usePipelineStatus() {
   return useQuery({
@@ -68,5 +68,19 @@ export function usePipelineHealth() {
     queryKey: ['pipelineHealth'],
     queryFn: () => apiGet<DependencyHealth>('/api/pipeline/health'),
     refetchInterval: 10000,
+  });
+}
+
+export function useOperationsHealth() {
+  return useQuery({
+    queryKey: ['operationsHealth'],
+    queryFn: () => apiGet<OperationsHealth>('/api/operations/health'),
+    refetchInterval: (query) => {
+      const health = query.state.data;
+      if (health && (health.activeRunPhase || health.activeRunStalled)) {
+        return 3000;
+      }
+      return 10000;
+    },
   });
 }

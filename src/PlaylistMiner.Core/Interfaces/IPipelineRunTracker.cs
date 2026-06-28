@@ -13,6 +13,6 @@ public interface IPipelineRunTracker
     Task FailRunAsync(string runId, string error, Action<PipelineRun>? updateAction = null, CancellationToken ct = default);
     Task DeferRunAsync(string runId, string error, Action<PipelineRun>? updateAction = null, CancellationToken ct = default);
     Task LogEventAsync(string runId, string level, string phase, string message, string? payloadJson = null, CancellationToken ct = default);
-    Task RecordWorkerHeartbeatAsync(CancellationToken ct = default);
+    Task RecordWorkerHeartbeatAsync(string? workerInstance = null, string? hostEnvironment = null, string? activeJobType = null, CancellationToken ct = default);
     Task<DateTime?> GetWorkerLastHeartbeatAsync(CancellationToken ct = default);
 }

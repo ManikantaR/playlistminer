@@ -14,6 +14,9 @@ public class PipelineRun
     public DateTime? CompletedAt { get; set; }
     public string? CurrentMessage { get; set; }
     public string? Error { get; set; }
+    public string? WorkerInstance { get; set; }
+    public string? HostEnvironment { get; set; }
+    public string? ActiveJobType { get; set; }
 
     // Sync counters
     public int PlaylistsDiscovered { get; set; }

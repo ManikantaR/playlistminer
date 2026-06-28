@@ -65,7 +65,15 @@ export default function PipelineCard() {
   const isActive = run.status === 'in_progress' || run.status === 'pending';
 
   // Get status color/badge
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, isStalled?: boolean) => {
+    if (isStalled) {
+      return (
+        <span className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 text-xs font-semibold px-2.5 py-0.5 rounded flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping" />
+          Stalled
+        </span>
+      );
+    }
     switch (status) {
       case 'pending':
         return <span className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 text-xs font-semibold px-2.5 py-0.5 rounded">Pending</span>;
@@ -109,13 +117,21 @@ export default function PipelineCard() {
   }
 
   return (
-    <Card className={isActive ? 'border-blue-200 dark:border-blue-900/50 bg-blue-50/20 dark:bg-blue-950/10' : ''}>
+    <Card className={
+      run.isStalled
+        ? 'border-red-200 dark:border-red-900/50 bg-red-50/20 dark:bg-red-950/10 animate-pulse'
+        : isActive
+        ? 'border-blue-200 dark:border-blue-900/50 bg-blue-50/20 dark:bg-blue-950/10'
+        : ''
+    }>
       <div className="flex flex-col gap-4">
         {/* Header Row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              {isActive ? (
+              {run.isStalled ? (
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              ) : isActive ? (
                 <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
               ) : run.status === 'completed' ? (
                 <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -128,10 +144,10 @@ export default function PipelineCard() {
             <div>
               <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 Background {run.pipelineType === 'sync' ? 'Sync' : 'Categorization'}
-                {getStatusBadge(run.status)}
+                {getStatusBadge(run.status, run.isStalled)}
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                {isActive ? `Active Phase: ${run.phase}` : `Finished: ${new Date(run.completedAt || run.updatedAt).toLocaleString()}`}
+                {run.isStalled ? 'Task Stalled' : isActive ? `Active Phase: ${run.phase}` : `Finished: ${new Date(run.completedAt || run.updatedAt).toLocaleString()}`}
               </p>
             </div>
           </div>
@@ -145,7 +161,16 @@ export default function PipelineCard() {
 
         {/* Status Message / Info */}
         <div className="text-sm">
-          {isActive ? (
+          {run.isStalled ? (
+            <div className="space-y-2">
+              <p className="font-medium text-red-700 dark:text-red-400">
+                Stalled: No updates received in the last 5 minutes. The background worker may be stuck or offline.
+              </p>
+              <p className="text-xs text-gray-500">
+                Last recorded phase: {run.phase} ({run.currentMessage || 'No status message'})
+              </p>
+            </div>
+          ) : isActive ? (
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-gray-500">
                 <span>{run.currentMessage || 'Running pipeline task...'}</span>

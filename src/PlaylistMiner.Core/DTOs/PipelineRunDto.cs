@@ -33,5 +33,6 @@ public record PipelineRunDto(
     int VideosSkipped,
     int RuleBasedHits,
     int TfidfHits,
-    int OllamaHits
+    int OllamaHits,
+    bool IsStalled = false
 );

@@ -7,15 +7,17 @@ import {
   usePipelineStatus,
   usePipelineHistory,
   usePipelineEvents,
-  usePipelineHealth
+  usePipelineHealth,
+  useOperationsHealth
 } from '@/hooks/usePipeline';
-import type { PipelineRun, PipelineEvent, DependencyHealth } from '@/types';
+import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth } from '@/types';
 import OperationsPage from '../app/operations/page';
 
 const mockUsePipelineStatus = usePipelineStatus as jest.MockedFunction<typeof usePipelineStatus>;
 const mockUsePipelineHistory = usePipelineHistory as jest.MockedFunction<typeof usePipelineHistory>;
 const mockUsePipelineEvents = usePipelineEvents as jest.MockedFunction<typeof usePipelineEvents>;
 const mockUsePipelineHealth = usePipelineHealth as jest.MockedFunction<typeof usePipelineHealth>;
+const mockUseOperationsHealth = useOperationsHealth as jest.MockedFunction<typeof useOperationsHealth>;
 
 const makeQueryResult = <T,>(data: T) => ({
   data,
@@ -47,6 +49,18 @@ describe('OperationsPage', () => {
     ollamaReachable: true,
     workerStatus: 'healthy',
     workerLastHeartbeat: new Date().toISOString(),
+  };
+
+  const sampleOperationsHealth: OperationsHealth = {
+    apiHealthy: true,
+    dbHealthy: true,
+    workerHealthy: true,
+    workerHeartbeatAgeSeconds: 5,
+    oauthConnected: true,
+    quotaExhausted: false,
+    ollamaReachable: true,
+    activeRunStalled: false,
+    activeRunPhase: null,
   };
 
   const sampleActiveSyncRun: PipelineRun = {
@@ -102,6 +116,7 @@ describe('OperationsPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseOperationsHealth.mockReturnValue(makeQueryResult(sampleOperationsHealth));
   });
 
   it('renders idle state when no runs have executed', () => {
@@ -190,5 +205,22 @@ describe('OperationsPage', () => {
     expect(screen.getAllByText('[info]').length).toBeGreaterThan(0);
     expect(screen.getByText('Sync starting')).toBeInTheDocument();
     expect(screen.getAllByText('Fetching metadata for chunk 2/5...').length).toBeGreaterThan(0);
+  });
+
+  it('renders stalled run alert banner when a task is stalled', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult({ ...sampleActiveSyncRun, isStalled: true }));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([{ ...sampleActiveSyncRun, isStalled: true }]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult(sampleEvents));
+    mockUseOperationsHealth.mockReturnValue(makeQueryResult({
+      ...sampleOperationsHealth,
+      activeRunStalled: true,
+      activeRunPhase: 'hydrating_video_metadata'
+    }));
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('System Stalled')).toBeInTheDocument();
+    expect(screen.getByText(/has stalled/i)).toBeInTheDocument();
   });
 });
