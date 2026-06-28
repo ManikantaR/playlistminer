@@ -72,6 +72,7 @@ services:
       start_period: 30s
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.pm-api.rule=Host(`playlistminer.home.manikantar.com`) && PathPrefix(`/api`)"
       - "traefik.http.routers.pm-api.entrypoints=websecure"
       - "traefik.http.routers.pm-api.tls=true"
@@ -129,6 +130,7 @@ services:
       - pm-internal
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.pm-web.rule=Host(`playlistminer.home.manikantar.com`)"
       - "traefik.http.routers.pm-web.entrypoints=websecure"
       - "traefik.http.routers.pm-web.tls=true"
