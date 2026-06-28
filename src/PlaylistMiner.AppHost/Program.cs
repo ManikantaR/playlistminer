@@ -13,7 +13,7 @@ var db = postgres.AddDatabase("playlistminer");
 var api = builder.AddProject<Projects.PlaylistMiner_Api>("api")
     .WithReference(db)
     .WaitFor(db)
-    .WithHttpEndpoint(port: 5000);
+    .WithHttpEndpoint(port: 5080);
 
 // C# Worker
 builder.AddProject<Projects.PlaylistMiner_Worker>("worker")

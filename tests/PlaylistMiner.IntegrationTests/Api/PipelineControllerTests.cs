@@ -157,4 +157,22 @@ public class PipelineControllerTests
         events![0].Phase.Should().Be("starting");
         events[1].Phase.Should().Be("completed");
     }
+
+    [Fact]
+    public async Task Test_GetHealth_Returns200_WithHealthStatus()
+    {
+        // Arrange
+        using var factory = new PlaylistMinerWebAppFactory();
+        var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/pipeline/health");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var health = await response.Content.ReadFromJsonAsync<DependencyHealthDto>();
+        health.Should().NotBeNull();
+        health!.Database.Should().Be("healthy");
+        health.WorkerStatus.Should().Be("unknown");
+    }
 }

@@ -93,3 +93,56 @@ export interface ImportResult {
   errors: number;
   batchId: string;
 }
+
+export interface PipelineRun {
+  runId: string;
+  pipelineType: string;
+  status: string;
+  phase: string;
+  startedAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  currentMessage: string | null;
+  error: string | null;
+
+  // Sync counters
+  playlistsDiscovered: number;
+  playlistsProcessed: number;
+  playlistItemsFetched: number;
+  uniqueVideoIdsIdentified: number;
+  videoMetadataBatchesTotal: number;
+  videoMetadataBatchesCompleted: number;
+  videosUpserted: number;
+  playlistVideoLinksWritten: number;
+  videosArchived: number;
+  videosDeferred: number;
+  errorsCount: number;
+
+  // Categorization counters
+  videosPendingTagging: number;
+  videosProcessed: number;
+  videosTagged: number;
+  videosSkipped: number;
+  ruleBasedHits: number;
+  tfidfHits: number;
+  ollamaHits: number;
+}
+
+export interface PipelineEvent {
+  id: number;
+  runId: string;
+  occurredAt: string;
+  level: string;
+  phase: string;
+  message: string;
+  payloadJson: string | null;
+}
+
+export interface DependencyHealth {
+  database: string;
+  oauthConnected: boolean;
+  youtubeQuotaAvailable: boolean;
+  ollamaReachable: boolean;
+  workerStatus: string;
+  workerLastHeartbeat: string | null;
+}

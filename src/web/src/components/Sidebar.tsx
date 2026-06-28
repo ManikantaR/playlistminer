@@ -11,6 +11,7 @@ import {
   Upload,
   RotateCcw,
   Settings,
+  Activity,
 } from 'lucide-react';
 
 const links = [
@@ -19,6 +20,7 @@ const links = [
   { href: '/suggestions', label: 'Suggestions', icon: Lightbulb },
   { href: '/playlists', label: 'Playlists', icon: ListMusic },
   { href: '/tags', label: 'Tags', icon: Tags },
+  { href: '/operations', label: 'Operations', icon: Activity },
   { href: '/import', label: 'Import', icon: Upload },
   { href: '/undo', label: 'Undo', icon: RotateCcw },
   { href: '/settings', label: 'Settings', icon: Settings },

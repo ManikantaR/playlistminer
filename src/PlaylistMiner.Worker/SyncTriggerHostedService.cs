@@ -16,6 +16,17 @@ public class SyncTriggerHostedService(
             try
             {
                 using var scope = scopeFactory.CreateScope();
+
+                try
+                {
+                    var tracker = scope.ServiceProvider.GetRequiredService<IPipelineRunTracker>();
+                    await tracker.RecordWorkerHeartbeatAsync(stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to record worker heartbeat");
+                }
+
                 var trigger = scope.ServiceProvider.GetRequiredService<ISyncTrigger>();
                 var syncService = scope.ServiceProvider.GetRequiredService<ISyncService>();
 

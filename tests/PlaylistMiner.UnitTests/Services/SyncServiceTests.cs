@@ -50,6 +50,11 @@ public class SyncServiceTests
         return mock;
     }
 
+    private static List<PlaylistItemDto> SampleItems(int count) =>
+        Enumerable.Range(1, count)
+            .Select(i => new PlaylistItemDto($"item{i}", $"vid{i:D3}", i - 1, DateTime.UtcNow))
+            .ToList();
+
     [Fact]
     public async Task Test_FullSync_FetchesAllPlaylistsAndVideos()
     {
@@ -233,6 +238,42 @@ public class SyncServiceTests
     }
 
     [Fact]
+    public async Task Test_FullSync_WhenQuotaAlreadyExhausted_CreatesDeferredPipelineRun()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var apiMock = new Mock<IYouTubeApiClient>(MockBehavior.Strict);
+        var quotaMock = new Mock<IQuotaTracker>();
+        quotaMock.Setup(q => q.IsQuotaExhaustedAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var service = new SyncService(apiMock.Object, quotaMock.Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
+
+        // Act
+        var result = await service.FullSyncAsync();
+
+        // Assert
+        result.DeferredCount.Should().Be(0);
+        result.Errors.Should().ContainSingle()
+            .Which.Should().Contain("quota exhausted");
+
+        var run = await db.PipelineRuns.SingleOrDefaultAsync();
+        run.Should().NotBeNull();
+        run!.PipelineType.Should().Be("sync");
+        run.Status.Should().Be("deferred");
+        run.Phase.Should().Be("deferred");
+        run.Error.Should().Contain("quota exhausted");
+
+        var events = await db.PipelineEvents
+            .Where(e => e.RunId == run.RunId)
+            .OrderBy(e => e.OccurredAt)
+            .ToListAsync();
+        events.Should().HaveCount(2);
+        events.Last().Level.Should().Be("warning");
+        events.Last().Phase.Should().Be("deferred");
+    }
+
+    [Fact]
     public async Task Test_InboxSync_OnlySyncsInboxPlaylist()
     {
         // Arrange
@@ -317,5 +358,34 @@ public class SyncServiceTests
         events.Should().NotBeEmpty();
         events.First().Phase.Should().Be("starting");
         events.Last().Phase.Should().Be("completed");
+    }
+
+    [Fact]
+    public async Task Test_FullSync_MetadataBatchProgress_UsesActualBatchIndex()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var apiMock = new Mock<IYouTubeApiClient>();
+        apiMock.Setup(a => a.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PlaylistDto("PLabc", "Inbox", null, true, 51)]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLabc", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SampleItems(51));
+        apiMock.SetupSequence(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Range(1, 49).Select(i => MakeVideo($"vid{i:D3}")).ToList())
+            .ReturnsAsync([MakeVideo("vid051")]);
+
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
+
+        // Act
+        await service.FullSyncAsync();
+
+        // Assert
+        var messages = await db.PipelineEvents
+            .OrderBy(e => e.OccurredAt)
+            .Select(e => e.Message)
+            .ToListAsync();
+
+        messages.Should().Contain("Completed metadata batch 1 of 2.");
+        messages.Should().Contain("Completed metadata batch 2 of 2.");
     }
 }

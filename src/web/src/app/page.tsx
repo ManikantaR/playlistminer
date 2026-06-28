@@ -8,6 +8,7 @@ import { RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useVideos } from '@/hooks/useVideos';
 import { useTags } from '@/hooks/useTags';
+import PipelineCard from '@/components/PipelineCard';
 
 export default function DashboardPage() {
   const { data: videosData } = useVideos({ pageSize: 1 });
@@ -38,6 +39,8 @@ export default function DashboardPage() {
           Sync Now
         </Button>
       </div>
+
+      <PipelineCard />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>

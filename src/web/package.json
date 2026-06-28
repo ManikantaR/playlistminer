@@ -9,7 +9,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "playwright test",
-    "generate-api": "npx openapi-typescript http://localhost:5000/swagger/v1/swagger.json -o src/types/api.d.ts",
+    "generate-api": "npx openapi-typescript http://localhost:5080/swagger/v1/swagger.json -o src/types/api.d.ts",
     "lint": "eslint ."
   },
   "keywords": [],

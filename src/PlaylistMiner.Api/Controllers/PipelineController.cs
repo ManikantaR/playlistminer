@@ -8,14 +8,48 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Models;
+using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Infrastructure.Data;
 
 namespace PlaylistMiner.Api.Controllers;
 
 [ApiController]
 [Route("api/pipeline")]
-public class PipelineController(PlaylistMinerDbContext db) : ControllerBase
+public class PipelineController(
+    PlaylistMinerDbContext db,
+    ITokenProvider tokenProvider,
+    IQuotaTracker quotaTracker,
+    IOllamaCategorizer ollamaCategorizer,
+    IPipelineRunTracker pipelineRunTracker) : ControllerBase
 {
+    [HttpGet("health")]
+    [ProducesResponseType<DependencyHealthDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetHealthAsync(CancellationToken ct = default)
+    {
+        var dbOk = await db.Database.CanConnectAsync(ct);
+        var oauthConnected = await tokenProvider.IsConnectedAsync(ct);
+        var quotaStatus = await quotaTracker.GetStatusAsync(ct);
+        var ollamaReachable = await ollamaCategorizer.IsAvailableAsync(ct);
+        var workerHeartbeat = await pipelineRunTracker.GetWorkerLastHeartbeatAsync(ct);
+
+        string workerStatus = "unknown";
+        if (workerHeartbeat.HasValue)
+        {
+            var diff = DateTime.UtcNow - workerHeartbeat.Value;
+            workerStatus = diff.TotalSeconds <= 30 ? "healthy" : "stale";
+        }
+
+        return Ok(new DependencyHealthDto
+        {
+            Database = dbOk ? "healthy" : "unhealthy",
+            OAuthConnected = oauthConnected,
+            YouTubeQuotaAvailable = !quotaStatus.IsExhausted,
+            OllamaReachable = ollamaReachable,
+            WorkerStatus = workerStatus,
+            WorkerLastHeartbeat = workerHeartbeat
+        });
+    }
+
     [HttpGet("status")]
     [ProducesResponseType<PipelineRunDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetStatusAsync(CancellationToken ct = default)

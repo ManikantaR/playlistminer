@@ -27,13 +27,32 @@ public sealed class SyncService(
 
     private async Task<SyncResult> RunSyncAsync(bool syncInboxOnly, CancellationToken ct)
     {
+        var runId = await tracker.StartRunAsync("sync", ct);
+
         if (await quotaTracker.IsQuotaExhaustedAsync(ct))
         {
             logger.LogWarning("Skipping sync — YouTube API quota exhausted for today.");
+
+            var deferredSyncLog = new SyncLog
+            {
+                SyncType = syncInboxOnly ? "Inbox" : "Full",
+                StartedAt = DateTime.UtcNow,
+                CompletedAt = DateTime.UtcNow,
+                Status = "Deferred",
+                VideosProcessed = 0,
+                VideosCategorized = 0,
+                Errors = "YouTube API quota exhausted for today. Will resume after midnight Pacific."
+            };
+            db.SyncLogs.Add(deferredSyncLog);
+            await db.SaveChangesAsync(ct);
+
+            await tracker.DeferRunAsync(
+                runId,
+                "YouTube API quota exhausted for today. Will resume after midnight Pacific.",
+                ct: ct);
+
             return new SyncResult(0, 0, ["YouTube API quota exhausted for today. Will resume after midnight Pacific."], 0);
         }
-
-        var runId = await tracker.StartRunAsync("sync", ct);
 
         var syncLog = new SyncLog
         {
@@ -122,13 +141,14 @@ public sealed class SyncService(
                     r.VideoMetadataBatchesCompleted = 0;
                 }, ct: ct);
 
-                foreach (var batch in batches)
+                for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
                 {
+                    var batch = batches[batchIndex];
                     var batchMetadata = await youTubeApiClient.GetVideoMetadataAsync(batch, ct);
                     metadataList.AddRange(batchMetadata);
                     await tracker.UpdateRunAsync(runId, r => {
                         r.VideoMetadataBatchesCompleted++;
-                    }, message: $"Completed metadata batch {metadataList.Count / 50 + (metadataList.Count % 50 > 0 ? 1 : 0)} of {batches.Count}.", ct: ct);
+                    }, message: $"Completed metadata batch {batchIndex + 1} of {batches.Count}.", ct: ct);
                 }
                 videoMetadata = metadataList;
             }
