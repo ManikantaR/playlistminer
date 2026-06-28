@@ -1,15 +1,18 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5050';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 export async function apiGet<T>(path: string, params?: Record<string, unknown>): Promise<T> {
-  const url = new URL(API_BASE + path);
+  const base = API_BASE || '';
+  let fullPath = base + path;
+
   if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') {
-        url.searchParams.set(k, String(v));
-      }
-    });
+    const qs = Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+      .join('&');
+    if (qs) fullPath += `?${qs}`;
   }
-  const res = await fetch(url.toString());
+
+  const res = await fetch(fullPath);
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json() as Promise<T>;
 }
