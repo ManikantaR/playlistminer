@@ -33,7 +33,6 @@ public class OperationsController(
         
         var heartbeat = await pipelineRunTracker.GetWorkerLastHeartbeatAsync(ct);
         var ageSeconds = heartbeat.HasValue ? (int)(DateTime.UtcNow - heartbeat.Value).TotalSeconds : int.MaxValue;
-        var workerHealthy = ageSeconds <= 30;
 
         var latest = await db.PipelineRuns
             .AsNoTracking()
@@ -42,6 +41,7 @@ public class OperationsController(
             .FirstOrDefaultAsync(ct);
 
         var activeRunStalled = false;
+        var activeRunProgressing = false;
         string? activeRunPhase = null;
 
         if (latest is not null && (latest.Status == "in_progress" || latest.Status == "pending"))
@@ -49,7 +49,13 @@ public class OperationsController(
             activeRunPhase = latest.Phase;
             var stallThreshold = configuration.GetValue<int>("Pipeline:StallThresholdSeconds", 300);
             activeRunStalled = (DateTime.UtcNow - latest.UpdatedAt).TotalSeconds > stallThreshold;
+            activeRunProgressing = !activeRunStalled;
         }
+
+        // The worker thread is busy (and not updating its idle heartbeat) while it runs a long
+        // sync, so a fresh, advancing run is itself proof of life. Treat the worker as healthy
+        // when the heartbeat is recent OR an active run is still making progress.
+        var workerHealthy = ageSeconds <= 30 || activeRunProgressing;
 
         return Ok(new OperationsHealthDto
         {
