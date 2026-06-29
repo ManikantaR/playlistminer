@@ -361,6 +361,39 @@ public class SyncServiceTests
     }
 
     [Fact]
+    public async Task Test_FullSync_Checkpoints_PersistsEarlierPlaylistsWhenLaterOneHitsQuota()
+    {
+        // Arrange — two playlists; metadata succeeds for the first, throws quota on the second.
+        using var db = CreateInMemoryDbContext();
+        var apiMock = new Mock<IYouTubeApiClient>();
+        apiMock.Setup(a => a.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistDto("PLone", "First", null, false, 1),
+                new PlaylistDto("PLtwo", "Second", null, false, 1)
+            ]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLone", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PlaylistItemDto("i1", "vidA", 0, DateTime.UtcNow)]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLtwo", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PlaylistItemDto("i2", "vidB", 0, DateTime.UtcNow)]);
+        apiMock.Setup(a => a.GetVideoMetadataAsync(It.Is<IEnumerable<string>>(ids => ids.Contains("vidA")), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([MakeVideo("vidA")]);
+        apiMock.Setup(a => a.GetVideoMetadataAsync(It.Is<IEnumerable<string>>(ids => ids.Contains("vidB")), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new QuotaExhaustedException());
+
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
+
+        // Act
+        var result = await service.FullSyncAsync();
+
+        // Assert — first playlist's video is committed; run deferred, not lost.
+        result.DeferredCount.Should().BeGreaterThan(0);
+        (await db.Videos.FirstOrDefaultAsync(v => v.YouTubeId == "vidA")).Should().NotBeNull();
+        var run = await db.PipelineRuns.FirstAsync();
+        run.Status.Should().Be("deferred");
+        run.PlaylistsProcessed.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Test_FullSync_MetadataBatchProgress_UsesActualBatchIndex()
     {
         // Arrange

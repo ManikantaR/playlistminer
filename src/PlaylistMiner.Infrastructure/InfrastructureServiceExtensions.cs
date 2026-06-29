@@ -70,6 +70,8 @@ public static class InfrastructureServiceExtensions
             return new YouTubeApiClient(httpClient, tokenProvider, quotaTracker);
         });
 
+        // Process-wide single-flight gate so concurrent syncs never write the same tables.
+        services.AddSingleton<SyncConcurrencyGate>();
         services.AddScoped<ISyncService, SyncService>();
 
         return services;

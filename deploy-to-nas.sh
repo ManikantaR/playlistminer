@@ -45,8 +45,10 @@ ok "NAS reachable"
 
 # ── Step 1: Sync code ───────────────────────────────────────
 sync_code() {
-    log "Packaging repo (excluding build artifacts)..."
-    # COPYFILE_DISABLE + --no-xattrs: UGOS BusyBox tar can't parse macOS extended attributes
+    log "Packaging repo (excluding build artifacts + secrets)..."
+    # COPYFILE_DISABLE + --no-xattrs: UGOS BusyBox tar can't parse macOS extended attributes.
+    # SECURITY: exclude .env / *.env / client_secret*.json so a local dev .env never overwrites
+    # the NAS's own credentials and the OAuth client secret never lands on the NAS via deploy.
     COPYFILE_DISABLE=1 tar czf "$TMP_ARCHIVE" \
         --no-xattrs \
         --exclude=node_modules \
@@ -56,10 +58,14 @@ sync_code() {
         --exclude=.next \
         --exclude=coverage \
         --exclude=TestResults \
+        --exclude='.env' \
+        --exclude='*.env' \
+        --exclude='client_secret*.json' \
         . 2>/dev/null || \
     COPYFILE_DISABLE=1 tar czf "$TMP_ARCHIVE" \
         --exclude=node_modules --exclude=.git --exclude=bin --exclude=obj \
-        --exclude=.next --exclude=coverage --exclude=TestResults .
+        --exclude=.next --exclude=coverage --exclude=TestResults \
+        --exclude='.env' --exclude='*.env' --exclude='client_secret*.json' .
 
     local size; size=$(du -h "$TMP_ARCHIVE" | cut -f1)
     log "Uploading to NAS ($size)..."

@@ -12,9 +12,13 @@ public class SyncTriggerHostedService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var workerInstance = Environment.MachineName;
-        var hostEnv = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") 
-            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") 
+        var hostEnv = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
             ?? "Production";
+
+        // Any run still "in_progress" with no update for this long is treated as stalled.
+        var staleThreshold = TimeSpan.FromMinutes(15);
+        var lastReap = DateTime.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -26,10 +30,20 @@ public class SyncTriggerHostedService(
                 {
                     var tracker = scope.ServiceProvider.GetRequiredService<IPipelineRunTracker>();
                     await tracker.RecordWorkerHeartbeatAsync(workerInstance, hostEnv, "idle", stoppingToken);
+
+                    // Reap stalled runs at most once a minute (and on the very first iteration,
+                    // which clears any run abandoned by a crash/restart, e.g. mid-deploy).
+                    if (DateTime.UtcNow - lastReap > TimeSpan.FromMinutes(1))
+                    {
+                        var reaped = await tracker.ReapStaleRunsAsync(staleThreshold, stoppingToken);
+                        if (reaped > 0)
+                            logger.LogWarning("Stale-run reaper marked {Count} stalled run(s) as failed.", reaped);
+                        lastReap = DateTime.UtcNow;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to record worker heartbeat");
+                    logger.LogWarning(ex, "Failed to record worker heartbeat / reap stale runs");
                 }
 
                 var trigger = scope.ServiceProvider.GetRequiredService<ISyncTrigger>();

@@ -143,4 +143,72 @@ public class PipelineRunTrackerTests
         events.Last().Level.Should().Be("warning");
         events.Last().Message.Should().Contain("Quota limit reached");
     }
+
+    [Fact]
+    public async Task Test_ReapStaleRunsAsync_FailsStalledRunAndSyncLog()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var tracker = new PipelineRunTracker(db);
+
+        db.PipelineRuns.Add(new PipelineRun
+        {
+            RunId = "stale-1",
+            PipelineType = "sync",
+            Status = "in_progress",
+            Phase = "linking_playlist_items",
+            StartedAt = DateTime.UtcNow.AddHours(-2),
+            UpdatedAt = DateTime.UtcNow.AddHours(-2)
+        });
+        db.SyncLogs.Add(new SyncLog
+        {
+            SyncType = "Full",
+            Status = "InProgress",
+            StartedAt = DateTime.UtcNow.AddHours(-2)
+        });
+        await db.SaveChangesAsync();
+
+        // Act
+        var reaped = await tracker.ReapStaleRunsAsync(TimeSpan.FromMinutes(15));
+
+        // Assert
+        reaped.Should().Be(1);
+        var run = await db.PipelineRuns.FirstAsync(r => r.RunId == "stale-1");
+        run.Status.Should().Be("failed");
+        run.Phase.Should().Be("stalled");
+        run.CompletedAt.Should().NotBeNull();
+
+        var log = await db.SyncLogs.FirstAsync();
+        log.Status.Should().Be("Failed");
+        log.CompletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Test_ReapStaleRunsAsync_LeavesFreshRunsAndHeartbeatAlone()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var tracker = new PipelineRunTracker(db);
+
+        db.PipelineRuns.AddRange(
+            new PipelineRun
+            {
+                RunId = "fresh", PipelineType = "sync", Status = "in_progress", Phase = "processing_playlists",
+                StartedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            },
+            new PipelineRun
+            {
+                RunId = "worker-heartbeat", PipelineType = "worker", Status = "active", Phase = "heartbeat",
+                StartedAt = DateTime.UtcNow.AddHours(-5), UpdatedAt = DateTime.UtcNow.AddHours(-5)
+            });
+        await db.SaveChangesAsync();
+
+        // Act
+        var reaped = await tracker.ReapStaleRunsAsync(TimeSpan.FromMinutes(15));
+
+        // Assert — fresh run untouched; heartbeat marker never reaped even when old.
+        reaped.Should().Be(0);
+        (await db.PipelineRuns.FirstAsync(r => r.RunId == "fresh")).Status.Should().Be("in_progress");
+        (await db.PipelineRuns.FirstAsync(r => r.RunId == "worker-heartbeat")).Status.Should().Be("active");
+    }
 }

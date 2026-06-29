@@ -15,4 +15,11 @@ public interface IPipelineRunTracker
     Task LogEventAsync(string runId, string level, string phase, string message, string? payloadJson = null, CancellationToken ct = default);
     Task RecordWorkerHeartbeatAsync(string? workerInstance = null, string? hostEnvironment = null, string? activeJobType = null, CancellationToken ct = default);
     Task<DateTime?> GetWorkerLastHeartbeatAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Marks any in-progress pipeline run (and its matching sync log) as failed when it has
+    /// not reported progress within <paramref name="threshold"/>. Prevents a crashed or
+    /// abandoned run from showing "in progress" forever. Returns the number of runs reaped.
+    /// </summary>
+    Task<int> ReapStaleRunsAsync(TimeSpan threshold, CancellationToken ct = default);
 }

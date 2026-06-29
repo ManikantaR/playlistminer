@@ -190,4 +190,56 @@ public class PipelineRunTracker(PlaylistMinerDbContext db) : IPipelineRunTracker
         var run = await db.PipelineRuns.FirstOrDefaultAsync(r => r.RunId == "worker-heartbeat", ct);
         return run?.UpdatedAt;
     }
+
+    public async Task<int> ReapStaleRunsAsync(TimeSpan threshold, CancellationToken ct = default)
+    {
+        var cutoff = DateTime.UtcNow - threshold;
+
+        // The heartbeat row (run_id = "worker-heartbeat") is a long-lived marker, not a run —
+        // never reap it. Only actual work runs left "in_progress" past the cutoff are stale.
+        var staleRuns = await db.PipelineRuns
+            .Where(r => r.Status == "in_progress"
+                        && r.RunId != "worker-heartbeat"
+                        && r.UpdatedAt < cutoff)
+            .ToListAsync(ct);
+
+        if (staleRuns.Count == 0)
+            return 0;
+
+        var now = DateTime.UtcNow;
+        foreach (var run in staleRuns)
+        {
+            var message = $"Run stalled — no progress for over {(int)threshold.TotalMinutes} minutes. Marked failed by stale-run reaper.";
+            run.Status = "failed";
+            run.Phase = "stalled";
+            run.Error = message;
+            run.CompletedAt = now;
+            run.UpdatedAt = now;
+            run.CurrentMessage = message;
+
+            db.PipelineEvents.Add(new PipelineEvent
+            {
+                RunId = run.RunId,
+                OccurredAt = now,
+                Level = "error",
+                Phase = "stalled",
+                Message = message,
+                PayloadJson = null
+            });
+        }
+
+        // Also close out any matching SyncLog rows still showing InProgress.
+        var staleLogs = await db.SyncLogs
+            .Where(s => s.Status == "InProgress" && s.StartedAt < cutoff)
+            .ToListAsync(ct);
+        foreach (var log in staleLogs)
+        {
+            log.Status = "Failed";
+            log.CompletedAt = now;
+            log.Errors = "Run stalled — no progress within threshold; marked failed by stale-run reaper.";
+        }
+
+        await db.SaveChangesAsync(ct);
+        return staleRuns.Count;
+    }
 }
