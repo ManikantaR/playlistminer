@@ -19,9 +19,10 @@ _Last updated: 2026-06-29_
 - Deploy: `./deploy-to-nas.sh` (tar → scp → build on NAS → `up -d --force-recreate`)
 - OAuth: ✅ connected (green). Refresh token persisted. Consent screen **In production** (tokens don't expire).
 
-## Data (as of 2026-06-29)
+## Data (as of 2026-06-29, post-fix verified)
 - Playlists: **406** synced
-- Videos: **11,614** synced
+- Videos: **11,620** · playlist→video links: **12,975**
+- Last full sync: ✅ **completed** end-to-end via the new incremental path (406/406)
 - Categorization runs: completing (~6,900 videos/run)
 
 ## What works
@@ -40,8 +41,9 @@ _Last updated: 2026-06-29_
     interrupted run can never show "in progress" forever (completes issue #18 stale-detection).
 
 ## Known issues / watch list
-- `UndoRepository.GetPendingAsync` had a LINQ-translation error on `/api/undo/pending`
-  (agent touched `UndoRepository.cs`; re-verify on the live `/undo` page after deploy).
+- ~~`UndoRepository.GetPendingAsync` LINQ error~~ — fixed (OrderBy moved before projection);
+  `GET /api/undo` returns 200 live.
+- `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
 - Organize engine still ~80% unbuilt (see [TASK.md](TASK.md), issues #2–#9): categorization
   only *suggests* tags; `PlaylistOrganizer.MoveVideoAsync` is unwired; `ConsolidateAsync` is a
   stub; no dedup; no watch-history import.

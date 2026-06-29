@@ -11,9 +11,10 @@ _Last updated: 2026-06-29_
   ops. Fixes the "Full sync stalls forever / nothing to show" breakage. (`SyncService`)
 - [x] **Single-flight sync gate** (`SyncConcurrencyGate`) — no concurrent table writers.
 - [x] **Stale-run reaper** (15-min) in worker loop + startup — finishes issue #18 stale-detection.
-- [ ] **Deploy + verify** the above on NAS; confirm a full sync now completes (not stuck InProgress).
-- [ ] **Close #16/#17/#18** once verified live; finish #19 (operator runbook).
-- [ ] Re-verify `UndoRepository.GetPendingAsync` / `/undo` page after deploy.
+- [x] **Deploy + verify** on NAS — full sync completed end-to-end (406/406, ~13k videos), no
+  stuck InProgress; reaper cleared the old stalled runs; `workerHealthy` true during a run.
+- [x] Re-verify undo — `GET /api/undo` returns 200 (LINQ bug already fixed by agent).
+- [ ] **Close #16/#17/#18** on GitHub (verified live); finish #19 (operator runbook).
 
 ## P0 — Organize Engine (the core missing ~80%) — `docs/ORGANIZE-ENGINE-SPEC.md`
 - [ ] #2 Make Ollama the primary classifier (reachability-gated; keyword/TF-IDF fallback)
