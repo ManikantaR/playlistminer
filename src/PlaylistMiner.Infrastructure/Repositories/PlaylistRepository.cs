@@ -37,6 +37,12 @@ public class PlaylistRepository(PlaylistMinerDbContext db) : IPlaylistRepository
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
+        var exists = await db.Playlists.AnyAsync(p => p.Id == playlistId, ct);
+        if (!exists)
+        {
+            throw new KeyNotFoundException($"Playlist with id {playlistId} was not found.");
+        }
+
         await db.Playlists
             .Where(p => p.IsInbox)
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsInbox, false), ct);

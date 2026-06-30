@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Mvc;
 using Moq;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
@@ -98,6 +99,34 @@ public class PlaylistsControllerTests
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         mockRepo.Verify(r => r.SetInboxAsync(1, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Test_SetInbox_WhenPlaylistMissing_Returns404ProblemDetails()
+    {
+        // Arrange
+        var mockRepo = new Mock<IPlaylistRepository>();
+        mockRepo.Setup(r => r.SetInboxAsync(999, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new KeyNotFoundException("Playlist with id 999 was not found."));
+
+        var mockOrganizer = new Mock<IPlaylistOrganizer>();
+
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+        {
+            services.AddSingleton(mockRepo.Object);
+            services.AddSingleton(mockOrganizer.Object);
+        });
+        var client = factory.CreateClient();
+
+        // Act
+        var response = await client.PostAsync("/api/playlists/999/set-inbox", null);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var details = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        details.Should().NotBeNull();
+        details!.Title.Should().Be("Playlist not found.");
+        details.Detail.Should().Contain("999");
     }
 
     [Fact]

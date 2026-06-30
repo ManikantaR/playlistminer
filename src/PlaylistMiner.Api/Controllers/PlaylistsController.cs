@@ -40,12 +40,25 @@ public class PlaylistsController(
         return Created($"/api/playlists/{playlist.Id}", dto);
     }
 
+    [HttpPost("{id:int}/set-inbox")]
     [HttpPost("{id:int}/inbox")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SetInboxAsync(int id, CancellationToken ct = default)
     {
-        await playlistRepository.SetInboxAsync(id, ct);
-        return Ok();
+        try
+        {
+            await playlistRepository.SetInboxAsync(id, ct);
+            return Ok();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Playlist not found.",
+                Detail = ex.Message
+            });
+        }
     }
 
     [HttpPost("consolidate")]
