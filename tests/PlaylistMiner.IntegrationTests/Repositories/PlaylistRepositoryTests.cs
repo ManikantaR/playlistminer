@@ -73,4 +73,18 @@ public class PlaylistRepositoryTests : RepositoryTestBase
         inbox!.Id.Should().Be(playlist.Id);
         inbox.IsInbox.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Test_SetInbox_WhenPlaylistDoesNotExist_ThrowsKeyNotFoundException()
+    {
+        // Arrange
+        var repo = new PlaylistRepository(DbContext);
+
+        // Act
+        var act = async () => await repo.SetInboxAsync(999);
+
+        // Assert
+        await act.Should().ThrowAsync<KeyNotFoundException>()
+            .WithMessage("*999*");
+    }
 }

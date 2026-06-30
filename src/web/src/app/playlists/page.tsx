@@ -1,20 +1,17 @@
 'use client';
-import { usePlaylists } from '@/hooks/usePlaylists';
+import { usePlaylists, useSetInboxPlaylist } from '@/hooks/usePlaylists';
 import Card from '@/components/ui/Card';
 import EmptyState from '@/components/ui/EmptyState';
 import { ListMusic } from 'lucide-react';
-import { apiPost } from '@/lib/api-client';
 import toast from 'react-hot-toast';
-import { useQueryClient } from '@tanstack/react-query';
 
 export default function PlaylistsPage() {
   const { data: playlists, isLoading } = usePlaylists();
-  const qc = useQueryClient();
+  const setInboxMutation = useSetInboxPlaylist();
 
   const setAsInbox = async (playlistId: number) => {
     try {
-      await apiPost(`/api/playlists/${playlistId}/inbox`);
-      await qc.invalidateQueries({ queryKey: ['playlists'] });
+      await setInboxMutation.mutateAsync(playlistId);
       toast.success('Inbox playlist updated');
     } catch {
       toast.error('Failed to set inbox');
@@ -48,6 +45,8 @@ export default function PlaylistsPage() {
           {!pl.isInbox && (
             <button
               onClick={() => setAsInbox(pl.id)}
+              disabled={setInboxMutation.isPending}
+              aria-label={`Set ${pl.name} as inbox`}
               className="text-sm text-blue-600 hover:underline"
             >
               Set as Inbox
