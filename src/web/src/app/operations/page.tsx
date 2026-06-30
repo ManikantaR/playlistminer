@@ -21,6 +21,36 @@ import {
   Terminal
 } from 'lucide-react';
 
+// Renders a dependency-health pill. Critically, when `loaded` is false (the health fetch
+// hasn't succeeded yet — e.g. first load during an API restart) it shows a neutral
+// "Checking…" rather than falsely flashing every dependency as down.
+function HealthPill({
+  loaded,
+  ok,
+  okLabel,
+  badLabel,
+  warn = false,
+}: {
+  loaded: boolean;
+  ok: boolean;
+  okLabel: string;
+  badLabel: string;
+  warn?: boolean;
+}) {
+  const cls = !loaded
+    ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+    : ok
+    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+    : warn
+    ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
+    : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300';
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${cls}`}>
+      {!loaded ? 'Checking…' : ok ? okLabel : badLabel}
+    </span>
+  );
+}
+
 export default function OperationsPage() {
   const { data: activeRun, refetch: refetchStatus } = usePipelineStatus();
   const { data: history, refetch: refetchHistory } = usePipelineHistory();
@@ -110,6 +140,15 @@ export default function OperationsPage() {
   };
 
   const getBannerState = () => {
+    // Until the health snapshot loads, stay neutral rather than prematurely flashing green.
+    if (!opsHealth && !activeRun) {
+      return {
+        title: 'Checking System Status…',
+        message: 'Fetching the latest dependency health and background-task state.',
+        bg: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-900/50 dark:text-gray-200 dark:border-gray-800',
+        icon: <RefreshCw className="w-5 h-5 text-gray-500 animate-spin" />
+      };
+    }
     if (opsHealth) {
       if (!opsHealth.dbHealthy || !opsHealth.workerHealthy) {
         return {
@@ -203,15 +242,7 @@ export default function OperationsPage() {
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
                 <Database className="w-4 h-4" /> Database
               </span>
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                  health?.database === 'healthy'
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                    : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
-                }`}
-              >
-                {health?.database === 'healthy' ? 'Healthy' : 'Unhealthy'}
-              </span>
+              <HealthPill loaded={!!health} ok={health?.database === 'healthy'} okLabel="Healthy" badLabel="Unhealthy" />
             </div>
 
             {/* OAuth Connection */}
@@ -219,15 +250,7 @@ export default function OperationsPage() {
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
                 <Key className="w-4 h-4" /> YouTube OAuth
               </span>
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                  health?.oauthConnected
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                    : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
-                }`}
-              >
-                {health?.oauthConnected ? 'Connected' : 'Disconnected'}
-              </span>
+              <HealthPill loaded={!!health} ok={!!health?.oauthConnected} okLabel="Connected" badLabel="Disconnected" />
             </div>
 
             {/* Quota Status */}
@@ -235,15 +258,7 @@ export default function OperationsPage() {
               <span className="text-sm font-medium text-gray-600 dark:text-gray-400 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4" /> YouTube Quota
               </span>
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                  health?.youtubeQuotaAvailable
-                    ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                    : 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
-                }`}
-              >
-                {health?.youtubeQuotaAvailable ? 'Available' : 'Exhausted'}
-              </span>
+              <HealthPill loaded={!!health} ok={!!health?.youtubeQuotaAvailable} okLabel="Available" badLabel="Exhausted" warn />
             </div>
 
             {/* Worker Heartbeat */}
@@ -253,16 +268,20 @@ export default function OperationsPage() {
               </span>
               <span
                 className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                  health?.workerStatus === 'healthy'
+                  !health
+                    ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                    : health.workerStatus === 'healthy'
                     ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
-                    : health?.workerStatus === 'stale'
+                    : health.workerStatus === 'stale'
                     ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
                     : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'
                 }`}
               >
-                {health?.workerStatus === 'healthy'
+                {!health
+                  ? 'Checking…'
+                  : health.workerStatus === 'healthy'
                   ? 'Healthy'
-                  : health?.workerStatus === 'stale'
+                  : health.workerStatus === 'stale'
                   ? 'Stale (Inactive)'
                   : 'Offline / Unknown'}
               </span>
@@ -275,12 +294,14 @@ export default function OperationsPage() {
               </span>
               <span
                 className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                  health?.ollamaReachable
+                  !health
+                    ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                    : health.ollamaReachable
                     ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
                     : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
                 }`}
               >
-                {health?.ollamaReachable ? 'Online' : 'Offline (Fallback to rules/TF-IDF)'}
+                {!health ? 'Checking…' : health.ollamaReachable ? 'Online' : 'Offline (Fallback to rules/TF-IDF)'}
               </span>
             </div>
           </div>
