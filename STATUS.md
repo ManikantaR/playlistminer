@@ -40,6 +40,19 @@ _Last updated: 2026-06-29_
   - Added **stale-run reaper** (15-min threshold) in the worker loop + on startup, so an
     interrupted run can never show "in progress" forever (completes issue #18 stale-detection).
 
+## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
+- The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
+  `npm run build` (see [api-client.ts](src/web/src/lib/api-client.ts) — browser branch has
+  no localhost fallback). If it's wrong, **every** client fetch fails and the UI shows
+  "Checking…" / "Not connected" even though the backend is 100% healthy.
+- Root cause seen 2026-06-30: NAS `.env` had `NEXT_PUBLIC_API_URL=http://localhost:5050`
+  (a dev value), so the browser fetched the user's laptop. Fixed → `https://playlistminer.home.manikantar.com`.
+- Changing it requires a **no-cache rebuild** of pm-web, not just recreate:
+  `docker compose -f docker-compose.playlistminer.yml --env-file <repo>/.env build --no-cache pm-web`.
+- Drift prevention: `deploy-to-nas.sh` now excludes `.env` from the tar, so the local dev
+  `.env` (which has localhost) can no longer overwrite the NAS value on deploy.
+- Verify the bake: `docker exec pm-web grep -rhoE 'https?://[^"]*manikantar[^"]*' .next | sort -u`.
+
 ## Known issues / watch list
 - ~~`UndoRepository.GetPendingAsync` LINQ error~~ — fixed (OrderBy moved before projection);
   `GET /api/undo` returns 200 live.
