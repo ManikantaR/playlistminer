@@ -5,7 +5,42 @@ playlist, classify each video into a topic, file it into a managed topic playlis
 it if needed), and remove duplicates. Today the app only produces *tag suggestions*; the
 move/consolidate/dedup logic is unbuilt or unwired (see §6). This spec defines the engine.
 
-Status: design (2026-06-15). Builds on VISION-v2 (learning agent) + NAS deployment.
+Status: design (2026-06-15; decisions locked 2026-06-30). Builds on VISION-v2 + NAS deployment.
+
+---
+
+## 0. Locked decisions (2026-06-30)
+
+Agreed with the user after research + grilling. These are the parameters every issue inherits.
+
+- **Playlists are the product; tags are a deferred internal index.** The engine's output is
+  YouTube playlist membership (visible on the user's phone YouTube app, where he actually
+  watches). Tags/`VideoTag` remain the *classifier signal* + seed for the Phase-2 learning
+  graph — **no tag-management UX is built now.**
+- **Aggressive auto-file.** When confidence ≥ threshold, the agent moves without asking; the
+  7-day `UndoLog` is the safety net. Below threshold → **needs review** queue (no quota spent).
+- **Up to 2 topic playlists per video.** Always 1 primary (highest confidence). Add a 2nd
+  topic only if it *also* clears the threshold. Never more (playlist bloat + budget).
+- **Newest-filed-first on YouTube.** Insert at `position 0` (free — it's the same insert).
+  **Never spend quota reordering** a playlist to maintain a sort; richer sorting is a free
+  app-side view, later. (User browses playlists in the YouTube phone app, so stored order
+  matters and must stay cheap.)
+- **Batch size ~20 videos/run**, throttled to a **daily move budget (~80 moves, configurable)**
+  reserving ~2,000 units for reads. When the budget is spent → defer remainder to tomorrow.
+- **Checkpoint per video; idempotent moves.** Advance the cursor only for fully-completed
+  videos. Every move carries an idempotency key (`videoId + targetPlaylistId + runId`) so a
+  crash/retry/quota-wall never double-moves or skips. (See research: the #1 checkpoint bug is
+  advancing the cursor on partial success.)
+- **Dedup is a separate, near-free DETECT pass and ships first.** Detecting duplicates is a
+  DB query (0 quota); only *resolution* costs a 50-unit delete. Same-video-twice-in-one-
+  playlist (exact dup) → auto-resolve; same video across *different* playlists is **intentional
+  multi-membership, NOT a duplicate** — only flag cross-playlist repeats inside *managed* lists.
+- **Observability suite (user lives in the phone YouTube app, not this UI):**
+  - **Telegram per-run digest is the primary channel** ("Filed 18 → AI Agents/TypeScript,
+    created 1 playlist, 3 need review, moves 18/80").
+  - **Activity feed** (append-only "what changed") + **move-budget quota meter** on `/operations`.
+- **Move approval = none (aggressive)**; the dry-run **plan** (§4) still exists as a *preview/
+  audit* surface and for the manual "review & run" path, but the scheduled loop auto-executes.
 
 ---
 
@@ -87,12 +122,22 @@ an estimated quota cost. User approves before execution.
 - UI: an "Organize" page — show the plan (creates/moves/dupes/review), approve, watch
   progress + quota budget; review queue for low-confidence items.
 
-## 8. Build order
+## 8. Build order (locked 2026-06-30 — maps to GitHub issues)
 
-1. LLM classifier → topic mapping (Ollama primary, reachability-gated).
-2. Managed-playlist materialization (auto-create topic playlists).
-3. Reorg planner (dry-run) + `/organize/plan` + Organize UI (plan view).
-4. Executor (throttled API) + undo + quota gating + `/organize/execute`.
-5. Dedup pass folded into planner/executor.
-6. (Optional) Playwright executor for bulk.
-7. (Phase 2) Takeout watch-history import as a learning signal.
+0. **Prereq — Set-as-Incoming UI + designate inbox** (#9). The loop drains "Incoming"; it must
+   be selectable. Cheap, unblocks everything.
+1. **Dedup DETECT pass + review list** (#6) — *first*: zero quota, immediate visible payoff
+   ("found 47 duplicates"). Auto-resolve exact same-playlist dups only.
+2. **Ollama-primary classifier, reachability-gated** (#2) — topic + confidence per video.
+3. **Topic→managed-playlist materialization** (auto-create) (#3).
+4. **Reorg planner (dry-run)** + `POST /api/organize/plan` + Organize UI preview (#4) — up to
+   2 topics/video, confidence, estimated quota.
+5. **Executor** (#5) — wire `MoveVideoAsync`; ~20-video batches, move-budget quota-aware,
+   idempotent, newest-first (`position 0`) insert, 7-day undo, checkpoint per video, defer on
+   budget. `POST /api/organize/execute` + scheduled auto-run.
+6. **Organize observability** (NEW) — activity feed + move-budget quota meter on `/operations`.
+7. **Telegram per-run digest** (NEW; relates to #12) — primary "what the agent did" channel.
+8. **Ollama reachability gating + `POST /api/agent/process-now`** (#8).
+9. **`ConsolidateAsync`** real merge of overlapping-topic playlists (#7) — later.
+10. (Optional) Playwright executor for bulk backfill beyond the daily budget.
+11. (Phase 2) Takeout watch-history import as a learning signal (#11).

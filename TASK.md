@@ -16,17 +16,24 @@ _Last updated: 2026-06-29_
 - [x] Re-verify undo — `GET /api/undo` returns 200 (LINQ bug already fixed by agent).
 - [ ] **Close #16/#17/#18** on GitHub (verified live); finish #19 (operator runbook).
 
-## P0 — Organize Engine (the core missing ~80%) — `docs/ORGANIZE-ENGINE-SPEC.md`
-- [ ] #2 Make Ollama the primary classifier (reachability-gated; keyword/TF-IDF fallback)
-- [ ] #3 Topic→playlist materialization (auto-create managed playlists)
-- [ ] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI
-- [ ] #5 Reorg executor — wire `MoveVideoAsync`, throttled + quota-aware + 7-day undo
+## Organize Engine — locked build order (`docs/ORGANIZE-ENGINE-SPEC.md` §0, §8)
+Decisions: playlists primary (tags deferred) · aggressive auto-file + 7-day undo · up-to-2
+topics/video · newest-first (`position 0`) insert, no reorder quota · ~20/batch, ~80 moves/day
+budget · checkpoint per video + idempotent · dedup detect first · Telegram digest primary.
+Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, Sonnet for UI/docs).
 
-## P1 — Organize Engine + Operations
-- [ ] #6 Deduplication pass (same video across/within playlists)
-- [ ] #7 Implement `ConsolidateAsync` (currently a stub) — merge overlapping-topic playlists
-- [ ] #8 Ollama reachability gating + `POST /api/agent/process-now` + "Process now" button
-- [ ] #9 Phase 0 completion: Set-as-Incoming UI + verify OAuth + first sync end-to-end
+- [ ] #9 **(prereq)** Set-as-Incoming UI + designate inbox + verify OAuth/first-sync e2e
+- [ ] #6 **(1st)** Dedup DETECT pass + review list — zero quota, immediate payoff
+- [ ] #2 Ollama-primary classifier (reachability-gated; keyword/TF-IDF fallback) → topic+confidence
+- [ ] #3 Topic→managed-playlist materialization (auto-create)
+- [ ] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI preview
+- [ ] #5 Executor — wire `MoveVideoAsync`, ~20/batch, move-budget, idempotent, newest-first, undo
+- [ ] #NEW-A Organize observability — activity feed + move-budget quota meter on `/operations`
+- [ ] #NEW-B Telegram per-run organize digest (primary "what the agent did" channel)
+- [ ] #8 Ollama reachability gating + `POST /api/agent/process-now` + button
+- [ ] #7 `ConsolidateAsync` real merge of overlapping-topic playlists (later)
+
+## Operations (#16–19)
 - [~] #16 Backend pipeline progress model + status/events API _(built; verify live)_
 - [~] #17 Operations UI: live pipeline page + dashboard card _(built; verify live)_
 - [~] #18 Worker heartbeat, dependency health, stalled-run detection _(reaper done; verify live)_
