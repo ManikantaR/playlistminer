@@ -135,8 +135,8 @@ an estimated quota cost. User approves before execution.
 5. **Executor** (#5) — wire `MoveVideoAsync`; ~20-video batches, move-budget quota-aware,
    idempotent, newest-first (`position 0`) insert, 7-day undo, checkpoint per video, defer on
    budget. `POST /api/organize/execute` + scheduled auto-run.
-6. **Organize observability** (NEW) — activity feed + move-budget quota meter on `/operations`.
-7. **Telegram per-run digest** (NEW; relates to #12) — primary "what the agent did" channel.
+6. **Organize observability** (#21) — activity feed + move-budget quota meter on `/operations`.
+7. **Telegram per-run digest** (#22; relates to #12) — primary "what the agent did" channel.
 8. **Ollama reachability gating + `POST /api/agent/process-now`** (#8).
 9. **`ConsolidateAsync`** real merge of overlapping-topic playlists (#7) — later.
 10. (Optional) Playwright executor for bulk backfill beyond the daily budget.
