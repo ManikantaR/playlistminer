@@ -73,6 +73,19 @@ public class RemoteDuplicateCleanupServiceTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistDto("PLinbox", "Inbox", null, true, 1, inbox.Id),
+                new PlaylistDto("PLtopic", "Distributed Systems", null, false, 1, topic.Id)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLinbox", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-inbox", "vid001", 0, now)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLtopic", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-topic", "vid001", 0, now)
+            ]);
         var quotaMock = new Mock<IQuotaTracker>();
         IRemoteDuplicateCleanupService service = new RemoteDuplicateCleanupService(
             db,
@@ -89,6 +102,95 @@ public class RemoteDuplicateCleanupServiceTests
         plan[0].VideoId.Should().Be(video.Id);
         plan[0].WinnerPlaylistId.Should().Be(topic.Id);
         plan[0].WinnerPlaylistName.Should().Be(topic.Name);
+        plan[0].LoserPlaylists.Should().ContainSingle();
+        plan[0].LoserPlaylists[0].PlaylistId.Should().Be(inbox.Id);
+        plan[0].LoserPlaylists[0].PlaylistItemId.Should().Be("pli-inbox");
+    }
+
+    [Fact]
+    public async Task Test_BuildPlan_WhenLocalStateAlreadyDeduped_DetectsRemoteDuplicateMemberships()
+    {
+        // Arrange
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLinbox",
+            Name = "Inbox",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var topic = new Playlist
+        {
+            Id = 2,
+            YouTubeId = "PLtopic",
+            Name = "Distributed Systems",
+            IsInbox = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var video = new Video
+        {
+            Id = 10,
+            YouTubeId = "vid001",
+            Title = "Distributed Systems Deep Dive",
+            Description = "desc",
+            ChannelName = "Channel",
+            ChannelId = "UC1",
+            ThumbnailUrl = "https://example.com/thumb.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.AddRange(inbox, topic);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = topic.Id,
+            VideoId = video.Id,
+            PlaylistItemId = "pli-topic",
+            Position = 0,
+            AddedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistDto("PLinbox", "Inbox", null, true, 1, inbox.Id),
+                new PlaylistDto("PLtopic", "Distributed Systems", null, false, 1, topic.Id)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLinbox", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-inbox", "vid001", 0, now)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLtopic", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-topic", "vid001", 0, now)
+            ]);
+
+        var quotaMock = new Mock<IQuotaTracker>();
+        IRemoteDuplicateCleanupService service = new RemoteDuplicateCleanupService(
+            db,
+            ytMock.Object,
+            quotaMock.Object,
+            new PipelineRunTracker(db),
+            NullLogger<RemoteDuplicateCleanupService>.Instance);
+
+        // Act
+        var plan = await service.BuildPlanAsync();
+
+        // Assert
+        plan.Should().HaveCount(1);
+        plan[0].WinnerPlaylistId.Should().Be(topic.Id);
         plan[0].LoserPlaylists.Should().ContainSingle();
         plan[0].LoserPlaylists[0].PlaylistId.Should().Be(inbox.Id);
         plan[0].LoserPlaylists[0].PlaylistItemId.Should().Be("pli-inbox");
@@ -144,6 +246,19 @@ public class RemoteDuplicateCleanupServiceTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistDto("PLa", "Playlist A", null, true, 1, a.Id),
+                new PlaylistDto("PLb", "Playlist B", null, false, 1, b.Id)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLa", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto(null!, "vid001", 0, now)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLb", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-b", "vid001", 0, now)
+            ]);
         var quotaMock = new Mock<IQuotaTracker>();
         IRemoteDuplicateCleanupService service = new RemoteDuplicateCleanupService(
             db,
@@ -163,7 +278,7 @@ public class RemoteDuplicateCleanupServiceTests
     }
 
     [Fact]
-    public async Task Test_BuildPlan_WhenPlaylistItemIdMissing_ResolvesFromYouTubeAndPersistsLocalLink()
+    public async Task Test_BuildPlan_WhenPlaylistItemIdMissing_UsesRemotePlaylistItemIdWithoutMutatingLocalLink()
     {
         // Arrange
         using var db = CreateDb();
@@ -212,10 +327,19 @@ public class RemoteDuplicateCleanupServiceTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistDto("PLloser", "Inbox", null, true, 1, loser.Id),
+                new PlaylistDto("PLwinner", "Backend Systems", null, false, 1, winner.Id)
+            ]);
         ytMock.Setup(y => y.GetPlaylistItemsAsync("PLloser", It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new PlaylistItemDto("pli-loser", "vid001", 0, now),
                 new PlaylistItemDto("pli-other", "vid999", 1, now)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLwinner", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-winner", "vid001", 0, now)
             ]);
         var quotaMock = new Mock<IQuotaTracker>();
         IRemoteDuplicateCleanupService service = new RemoteDuplicateCleanupService(
@@ -233,12 +357,12 @@ public class RemoteDuplicateCleanupServiceTests
         plan[0].HasUnresolvedRemovals.Should().BeFalse();
         plan[0].LoserPlaylists.Should().ContainSingle();
         plan[0].LoserPlaylists[0].PlaylistItemId.Should().Be("pli-loser");
-        (await db.PlaylistVideos.SingleAsync(pv => pv.PlaylistId == loser.Id && pv.VideoId == video.Id)).PlaylistItemId.Should().Be("pli-loser");
+        (await db.PlaylistVideos.SingleAsync(pv => pv.PlaylistId == loser.Id && pv.VideoId == video.Id)).PlaylistItemId.Should().BeNull();
         ytMock.Verify(y => y.GetPlaylistItemsAsync("PLloser", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Test_BuildPlan_WhenMultipleVideosNeedSamePlaylistHydration_FetchesPlaylistOnce()
+    public async Task Test_BuildPlan_WhenMultipleVideosNeedSamePlaylistEnumeration_FetchesPlaylistOnce()
     {
         // Arrange
         using var db = CreateDb();
@@ -314,10 +438,24 @@ public class RemoteDuplicateCleanupServiceTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistDto("PLloser", "Inbox", null, true, 2, loser.Id),
+                new PlaylistDto("PLwinnerA", "Winner A", null, false, 1, winnerA.Id),
+                new PlaylistDto("PLwinnerB", "Winner B", null, false, 1, winnerB.Id)
+            ]);
         ytMock.Setup(y => y.GetPlaylistItemsAsync("PLloser", It.IsAny<CancellationToken>()))
             .ReturnsAsync([
                 new PlaylistItemDto("pli-loser-a", "vid001", 0, now),
                 new PlaylistItemDto("pli-loser-b", "vid002", 1, now)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLwinnerA", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-winner-a", "vid001", 0, now)
+            ]);
+        ytMock.Setup(y => y.GetPlaylistItemsAsync("PLwinnerB", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new PlaylistItemDto("pli-winner-b", "vid002", 0, now)
             ]);
         var quotaMock = new Mock<IQuotaTracker>();
         IRemoteDuplicateCleanupService service = new RemoteDuplicateCleanupService(
@@ -335,7 +473,7 @@ public class RemoteDuplicateCleanupServiceTests
         plan.Should().OnlyContain(item => item.HasUnresolvedRemovals == false);
         (await db.PlaylistVideos.Where(pv => pv.PlaylistId == loser.Id).OrderBy(pv => pv.VideoId).Select(pv => pv.PlaylistItemId).ToListAsync())
             .Should()
-            .Equal("pli-loser-a", "pli-loser-b");
+            .Equal([null, null]);
         ytMock.Verify(y => y.GetPlaylistItemsAsync("PLloser", It.IsAny<CancellationToken>()), Times.Once);
     }
 
