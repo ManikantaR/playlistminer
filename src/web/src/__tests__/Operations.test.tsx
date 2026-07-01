@@ -378,6 +378,64 @@ describe('OperationsPage', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('submits only the configured small batch of remote cleanup removals', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    const mutateAsync = jest.fn();
+    const multiRemovalPlan: RemoteDuplicateCleanupItem[] = [
+      {
+        videoId: 42,
+        youTubeId: 'dupvideo01',
+        title: 'Distributed Systems Deep Dive',
+        winnerPlaylistId: 8,
+        winnerPlaylistName: 'Backend Systems',
+        hasUnresolvedRemovals: false,
+        loserPlaylists: [
+          { playlistId: 7, playlistName: 'AI Agents', playlistItemId: 'pli-ai' },
+        ],
+      },
+      {
+        videoId: 43,
+        youTubeId: 'dupvideo02',
+        title: 'Async Messaging',
+        winnerPlaylistId: 10,
+        winnerPlaylistName: 'Messaging',
+        hasUnresolvedRemovals: false,
+        loserPlaylists: [
+          { playlistId: 11, playlistName: 'Queues', playlistItemId: 'pli-queue' },
+          { playlistId: 12, playlistName: 'Architecture', playlistItemId: 'pli-arch' },
+        ],
+      },
+    ];
+
+    mockUseBuildRemoteCleanupPlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: multiRemovalPlan,
+      isPending: false,
+    } as ReturnType<typeof useBuildRemoteCleanupPlan>);
+    mockUseExecuteRemoteCleanup.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteRemoteCleanup>);
+
+    render(<OperationsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute Remote Cleanup' }));
+    fireEvent.change(screen.getByLabelText('Max removals this run'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Cleanup' }));
+
+    expect(mutateAsync).toHaveBeenCalledWith([
+      multiRemovalPlan[0],
+      {
+        ...multiRemovalPlan[1],
+        loserPlaylists: [multiRemovalPlan[1].loserPlaylists[0]],
+      },
+    ]);
+  });
+
   it('disables remote cleanup execution when the plan has unresolved removals', () => {
     mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
     mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));

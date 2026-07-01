@@ -88,6 +88,40 @@ public class RemoteDuplicateCleanupControllerTests
     }
 
     [Fact]
+    public async Task Test_ExecuteRemoteCleanup_WhenRequestExceedsRemovalLimit_Returns400ProblemDetails()
+    {
+        // Arrange
+        var mockService = new Mock<IRemoteDuplicateCleanupService>(MockBehavior.Strict);
+
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+        {
+            services.AddSingleton(mockService.Object);
+        });
+        var client = factory.CreateClient();
+
+        var request = Enumerable.Range(1, 26)
+            .Select(index => new RemoteDuplicateCleanupItemDto(
+                index,
+                $"vid{index:D3}",
+                $"Video {index}",
+                200 + index,
+                $"Winner {index}",
+                false,
+                [new RemoteDuplicateRemovalTargetDto(100 + index, $"Loser {index}", $"pli-{index:D3}")]))
+            .ToList();
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/operations/duplicates/execute-remote-cleanup", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        problem.Should().NotBeNull();
+        problem!.Title.Should().Be("Remote cleanup request exceeds the allowed batch size.");
+        problem.Detail.Should().Contain("25");
+    }
+
+    [Fact]
     public async Task Test_ExecuteRemoteCleanup_WhenPlanHasUnresolvedRemovals_Returns400ProblemDetails()
     {
         // Arrange

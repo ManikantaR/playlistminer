@@ -24,6 +24,8 @@ public class OperationsController(
     IRemoteDuplicateCleanupService remoteDuplicateCleanupService,
     IConfiguration configuration) : ControllerBase
 {
+    private const int MaxRemoteCleanupRemovalsPerRequest = 25;
+
     [HttpGet("health")]
     [ProducesResponseType<OperationsHealthDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetHealthAsync(CancellationToken ct = default)
@@ -91,6 +93,7 @@ public class OperationsController(
 
     [HttpPost("duplicates/execute-remote-cleanup")]
     [ProducesResponseType<RemoteDuplicateCleanupResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExecuteRemoteCleanupAsync(
         [FromBody] List<RemoteDuplicateCleanupItemDto> plan,
         CancellationToken ct = default)
@@ -101,6 +104,16 @@ public class OperationsController(
             {
                 Title = "Remote cleanup plan has unresolved removals.",
                 Detail = "Resolve missing playlist item ids before executing remote cleanup."
+            });
+        }
+
+        var requestedRemovals = plan.Sum(item => item.LoserPlaylists.Count);
+        if (requestedRemovals > MaxRemoteCleanupRemovalsPerRequest)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Remote cleanup request exceeds the allowed batch size.",
+                Detail = $"Submit at most {MaxRemoteCleanupRemovalsPerRequest} removals per execution request."
             });
         }
 

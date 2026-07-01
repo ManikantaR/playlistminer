@@ -7,6 +7,7 @@ import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useR
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import Input from '@/components/ui/Input';
 import {
   Activity,
   Play,
@@ -23,6 +24,10 @@ import {
   History,
   Terminal
 } from 'lucide-react';
+import type { RemoteDuplicateCleanupItem } from '@/types';
+
+const MAX_REMOTE_CLEANUP_REMOVALS_PER_RUN = 25;
+const DEFAULT_REMOTE_CLEANUP_BATCH_SIZE = 5;
 
 // Renders a dependency-health pill. Critically, when `loaded` is false (the health fetch
 // hasn't succeeded yet — e.g. first load during an API restart) it shows a neutral
@@ -74,6 +79,7 @@ export default function OperationsPage() {
   const remoteCleanupPlan = useBuildRemoteCleanupPlan();
   const remoteCleanupExecution = useExecuteRemoteCleanup();
   const [confirmRemoteCleanupOpen, setConfirmRemoteCleanupOpen] = useState(false);
+  const [remoteCleanupBatchSize, setRemoteCleanupBatchSize] = useState(DEFAULT_REMOTE_CLEANUP_BATCH_SIZE);
 
   // If there's an active run, we fetch events for it. Otherwise, we fetch events for the latest run.
   const selectedRunId = activeRun?.runId;
@@ -118,13 +124,47 @@ export default function OperationsPage() {
     await remoteCleanupPlan.mutateAsync();
   };
 
+  const countRemoteCleanupRemovals = (plan: RemoteDuplicateCleanupItem[]) =>
+    plan.reduce((total, item) => total + item.loserPlaylists.length, 0);
+
+  const limitRemoteCleanupPlan = (plan: RemoteDuplicateCleanupItem[], maxRemovals: number) => {
+    let remaining = maxRemovals;
+
+    return plan.reduce<RemoteDuplicateCleanupItem[]>((limited, item) => {
+      if (remaining <= 0) {
+        return limited;
+      }
+
+      const loserPlaylists = item.loserPlaylists.slice(0, remaining);
+      if (loserPlaylists.length === 0) {
+        return limited;
+      }
+
+      limited.push({
+        ...item,
+        loserPlaylists,
+        hasUnresolvedRemovals: loserPlaylists.some(playlist => !playlist.playlistItemId),
+      });
+
+      remaining -= loserPlaylists.length;
+      return limited;
+    }, []);
+  };
+
   const executeRemoteCleanup = async () => {
     if (!remoteCleanupPlan.data || remoteCleanupPlan.data.length === 0) return;
+    const limitedPlan = limitRemoteCleanupPlan(remoteCleanupPlan.data, effectiveRemoteCleanupBatchSize);
+    if (limitedPlan.length === 0) return;
     setConfirmRemoteCleanupOpen(false);
-    await remoteCleanupExecution.mutateAsync(remoteCleanupPlan.data);
+    await remoteCleanupExecution.mutateAsync(limitedPlan);
   };
 
   const hasUnresolvedRemoteCleanupItems = !!remoteCleanupPlan.data?.some(item => item.hasUnresolvedRemovals);
+  const totalRemoteCleanupRemovals = remoteCleanupPlan.data ? countRemoteCleanupRemovals(remoteCleanupPlan.data) : 0;
+  const effectiveRemoteCleanupBatchSize = Math.max(
+    1,
+    Math.min(remoteCleanupBatchSize, totalRemoteCleanupRemovals || 1, MAX_REMOTE_CLEANUP_REMOVALS_PER_RUN),
+  );
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -587,8 +627,19 @@ export default function OperationsPage() {
           <p>
             This will remove duplicate playlist memberships on YouTube and keep only the winning playlist for each planned video.
           </p>
+          <Input
+            id="remote-cleanup-batch-size"
+            label="Max removals this run"
+            type="number"
+            min={1}
+            max={Math.min(totalRemoteCleanupRemovals || 1, MAX_REMOTE_CLEANUP_REMOVALS_PER_RUN)}
+            value={remoteCleanupBatchSize}
+            onChange={(event) => setRemoteCleanupBatchSize(Number(event.target.value) || 1)}
+          />
           <div className="rounded-md bg-gray-50 p-3 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
-            {remoteCleanupPlan.data?.length ?? 0} videos in plan
+            <p>{remoteCleanupPlan.data?.length ?? 0} videos in plan</p>
+            <p className="mt-1">{totalRemoteCleanupRemovals} removable playlist memberships available</p>
+            <p className="mt-1">This run will execute up to {effectiveRemoteCleanupBatchSize} removals.</p>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirmRemoteCleanupOpen(false)}>
