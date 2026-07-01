@@ -53,12 +53,16 @@ _Last updated: 2026-06-30_
 - **Remote YouTube duplicate cleanup (#24).**
   - Planner: `POST /api/operations/duplicates/plan-remote-cleanup`
   - Executor: `POST /api/operations/duplicates/execute-remote-cleanup`
-  - UI: `/operations` shows duplicate review, remote cleanup plan, confirmation modal, and
-    execution summary.
-  - Latest live dry-run before reconciliation rollout: planner returned **1,104** duplicate
-    candidates, all unresolved because loser links lacked `playlist_item_id`.
-  - Remaining: redeploy and re-run live planner after reconciliation, then broaden drift/live
-    verification and execution hardening polish.
+  - UI: `/operations` shows duplicate review, remote cleanup plan, confirmation modal, batch-size
+    control, and execution summary.
+  - Reconciliation rollout result: planner now resolves loser-side `playlist_item_id` values;
+    the live plan became **1,104 resolved / 0 unresolved**.
+  - Controlled live batch result: executed **5/5** planned removals successfully on YouTube
+    (`runId: a8dfb170-3030-4502-96ea-a734068bb078`).
+  - Post-run verification: planner dropped from **1,104 duplicate videos / 1,355 removals** to
+    **1,099 duplicate videos / 1,350 removals** immediately after the batch.
+  - Remaining: continue staged live cleanup batches, broaden drift/live verification, and finish
+    execution hardening polish.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
