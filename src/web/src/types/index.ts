@@ -49,6 +49,48 @@ export interface Playlist {
   itemCount: number;
 }
 
+export interface DuplicatePlaylist {
+  playlistId: number;
+  playlistName: string;
+  isManaged: boolean;
+  topic: string | null;
+}
+
+export interface DuplicateReview {
+  videoId: number;
+  youTubeId: string;
+  title: string;
+  thumbnailUrl: string;
+  playlistCount: number;
+  playlists: DuplicatePlaylist[];
+}
+
+export interface RemoteDuplicateRemovalTarget {
+  playlistId: number;
+  playlistName: string;
+  playlistItemId: string | null;
+}
+
+export interface RemoteDuplicateCleanupItem {
+  videoId: number;
+  youTubeId: string;
+  title: string;
+  winnerPlaylistId: number;
+  winnerPlaylistName: string;
+  hasUnresolvedRemovals: boolean;
+  loserPlaylists: RemoteDuplicateRemovalTarget[];
+}
+
+export interface RemoteDuplicateCleanupResult {
+  videosExamined: number;
+  removalsPlanned: number;
+  removalsExecuted: number;
+  removalsSkipped: number;
+  deferredCount: number;
+  errors: string[];
+  runId: string | null;
+}
+
 export interface PagedResult<T> {
   items: T[];
   totalCount: number;

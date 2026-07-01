@@ -36,6 +36,7 @@ public static class InfrastructureServiceExtensions
     {
         services.AddScoped<IVideoService, VideoService>();
         services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
+        services.AddScoped<IRemoteDuplicateCleanupService, RemoteDuplicateCleanupService>();
         services.AddScoped<IImportService, ImportService>();
         services.AddScoped<ISyncTrigger, SyncTriggerService>();
         services.AddScoped<IBackupService, BackupService>();

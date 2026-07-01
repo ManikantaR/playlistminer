@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Exceptions;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
@@ -205,5 +206,109 @@ public class PlaylistOrganizerTests
         // Assert
         result.Should().NotBeNull();
         result.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Test_GetDuplicateReviewAsync_ReturnsVideosAssignedToMultiplePlaylists()
+    {
+        // Arrange
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+
+        var duplicateVideo = new Video
+        {
+            Id = 10,
+            YouTubeId = "dupvideo01",
+            Title = "Distributed Systems Deep Dive",
+            Description = "Desc",
+            ChannelName = "Channel",
+            ChannelId = "UCdup1",
+            ThumbnailUrl = "https://example.com/dup.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now.AddDays(-10),
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        var uniqueVideo = new Video
+        {
+            Id = 11,
+            YouTubeId = "uniquevideo1",
+            Title = "Unique Placement",
+            Description = "Desc",
+            ChannelName = "Channel",
+            ChannelId = "UCdup2",
+            ThumbnailUrl = "https://example.com/single.jpg",
+            Duration = TimeSpan.FromMinutes(8),
+            PublishedAt = now.AddDays(-5),
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        var managedA = new Playlist
+        {
+            Id = 21,
+            YouTubeId = "PLmanagedA",
+            Name = "AI Agents",
+            IsManaged = true,
+            Topic = "AI Agents",
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        var managedB = new Playlist
+        {
+            Id = 22,
+            YouTubeId = "PLmanagedB",
+            Name = "Backend Systems",
+            IsManaged = true,
+            Topic = "Backend Systems",
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        var unmanaged = new Playlist
+        {
+            Id = 23,
+            YouTubeId = "PLmanual01",
+            Name = "Watch Later Clone",
+            IsManaged = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Videos.AddRange(duplicateVideo, uniqueVideo);
+        db.Playlists.AddRange(managedA, managedB, unmanaged);
+        db.PlaylistVideos.AddRange(
+            new PlaylistVideo { PlaylistId = managedA.Id, VideoId = duplicateVideo.Id, Position = 0, AddedAt = now },
+            new PlaylistVideo { PlaylistId = managedB.Id, VideoId = duplicateVideo.Id, Position = 1, AddedAt = now },
+            new PlaylistVideo { PlaylistId = unmanaged.Id, VideoId = duplicateVideo.Id, Position = 2, AddedAt = now },
+            new PlaylistVideo { PlaylistId = managedA.Id, VideoId = uniqueVideo.Id, Position = 3, AddedAt = now });
+        await db.SaveChangesAsync();
+
+        var ytMock = new Mock<IYouTubeApiClient>();
+        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+
+        // Act
+        var result = await organizer.GetDuplicateReviewAsync();
+
+        // Assert
+        result.Should().HaveCount(1);
+        result[0].VideoId.Should().Be(duplicateVideo.Id);
+        result[0].YouTubeId.Should().Be("dupvideo01");
+        result[0].PlaylistCount.Should().Be(3);
+        result[0].Playlists.Should().BeEquivalentTo(
+        [
+            new DuplicatePlaylistDto(managedA.Id, managedA.Name, true, managedA.Topic),
+            new DuplicatePlaylistDto(managedB.Id, managedB.Name, true, managedB.Topic),
+            new DuplicatePlaylistDto(unmanaged.Id, unmanaged.Name, false, unmanaged.Topic)
+        ]);
     }
 }

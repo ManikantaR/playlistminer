@@ -421,4 +421,122 @@ public class SyncServiceTests
         messages.Should().Contain("Completed metadata batch 1 of 2.");
         messages.Should().Contain("Completed metadata batch 2 of 2.");
     }
+
+    [Fact]
+    public async Task Test_FullSync_WhenVideoAppearsInMultiplePlaylists_KeepsSinglePlaylistLink()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var apiMock = new Mock<IYouTubeApiClient>();
+        apiMock.Setup(a => a.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new PlaylistDto("PLabc", "Inbox", null, true, 1),
+                new PlaylistDto("PLdef", "Tech", null, false, 1)
+            ]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLabc", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PlaylistItemDto("item1", "vid001", 0, DateTime.UtcNow)]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLdef", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PlaylistItemDto("item2", "vid001", 0, DateTime.UtcNow)]);
+        apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([MakeVideo("vid001")]);
+
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
+
+        // Act
+        await service.FullSyncAsync();
+
+        // Assert
+        var links = await db.PlaylistVideos
+            .Include(pv => pv.Playlist)
+            .Where(pv => pv.Video.YouTubeId == "vid001")
+            .ToListAsync();
+
+        links.Should().HaveCount(1);
+        links[0].Playlist.Name.Should().Be("Tech");
+    }
+
+    [Fact]
+    public async Task Test_FullSync_WhenVideoMovesToDifferentPlaylist_ReassignsSinglePlaylistLink()
+    {
+        // Arrange
+        using var db = CreateInMemoryDbContext();
+        var now = DateTime.UtcNow;
+
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLabc",
+            Name = "Inbox",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        var tech = new Playlist
+        {
+            Id = 2,
+            YouTubeId = "PLdef",
+            Name = "Tech",
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        var video = new Video
+        {
+            Id = 1,
+            YouTubeId = "vid001",
+            Title = "Title vid001",
+            Description = "Desc",
+            ChannelName = "Channel",
+            ChannelId = "UC123",
+            ThumbnailUrl = "https://thumb.jpg",
+            Duration = TimeSpan.FromMinutes(5),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.AddRange(inbox, tech);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = inbox.Id,
+            VideoId = video.Id,
+            Position = 0,
+            AddedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var apiMock = new Mock<IYouTubeApiClient>();
+        apiMock.Setup(a => a.GetUserPlaylistsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new PlaylistDto("PLabc", "Inbox", null, true, 0),
+                new PlaylistDto("PLdef", "Tech", null, false, 1)
+            ]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLabc", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        apiMock.Setup(a => a.GetPlaylistItemsAsync("PLdef", It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new PlaylistItemDto("item2", "vid001", 0, DateTime.UtcNow)]);
+        apiMock.Setup(a => a.GetVideoMetadataAsync(It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([MakeVideo("vid001")]);
+
+        var service = new SyncService(apiMock.Object, CreateQuotaTrackerMock().Object, db, new PipelineRunTracker(db), NullLogger<SyncService>.Instance);
+
+        // Act
+        await service.FullSyncAsync();
+
+        // Assert
+        var links = await db.PlaylistVideos
+            .Where(pv => pv.VideoId == video.Id)
+            .ToListAsync();
+
+        links.Should().HaveCount(1);
+        links[0].PlaylistId.Should().Be(tech.Id);
+    }
 }

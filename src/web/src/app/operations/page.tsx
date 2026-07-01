@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { usePipelineStatus, usePipelineHistory, usePipelineEvents, usePipelineHealth, useOperationsHealth } from '@/hooks/usePipeline';
+import { useDuplicateReview } from '@/hooks/useDuplicates';
+import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
 import {
   Activity,
   Play,
@@ -56,6 +59,10 @@ export default function OperationsPage() {
   const { data: history, refetch: refetchHistory } = usePipelineHistory();
   const { data: health, refetch: refetchHealth } = usePipelineHealth();
   const { data: opsHealth, refetch: refetchOpsHealth } = useOperationsHealth();
+  const { data: duplicates } = useDuplicateReview();
+  const remoteCleanupPlan = useBuildRemoteCleanupPlan();
+  const remoteCleanupExecution = useExecuteRemoteCleanup();
+  const [confirmRemoteCleanupOpen, setConfirmRemoteCleanupOpen] = useState(false);
 
   // If there's an active run, we fetch events for it. Otherwise, we fetch events for the latest run.
   const selectedRunId = activeRun?.runId;
@@ -94,6 +101,16 @@ export default function OperationsPage() {
     refetchHealth();
     refetchOpsHealth();
     if (selectedRunId) refetchEvents();
+  };
+
+  const buildRemoteCleanupPlan = async () => {
+    await remoteCleanupPlan.mutateAsync();
+  };
+
+  const executeRemoteCleanup = async () => {
+    if (!remoteCleanupPlan.data || remoteCleanupPlan.data.length === 0) return;
+    setConfirmRemoteCleanupOpen(false);
+    await remoteCleanupExecution.mutateAsync(remoteCleanupPlan.data);
   };
 
   const getStatusBadge = (status: string) => {
@@ -392,6 +409,167 @@ export default function OperationsPage() {
           )}
         </Card>
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Duplicate Review Queue</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Videos assigned to more than one playlist. This pass spends no YouTube quota.
+            </p>
+          </div>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+            {duplicates?.length ?? 0} flagged
+          </span>
+        </div>
+
+        {!duplicates || duplicates.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            No cross-playlist duplicates found.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {duplicates.map((duplicate) => (
+              <div
+                key={duplicate.videoId}
+                className="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">{duplicate.title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Present in {duplicate.playlistCount} playlists
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                    {duplicate.youTubeId}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {duplicate.playlists.map((playlist) => (
+                    <span
+                      key={`${duplicate.videoId}-${playlist.playlistId}`}
+                      className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-300"
+                    >
+                      {playlist.playlistName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Remote Cleanup Plan</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Preview which YouTube playlist memberships would be removed to enforce one playlist per video.
+            </p>
+          </div>
+          <Button
+            onClick={buildRemoteCleanupPlan}
+            variant="secondary"
+            disabled={remoteCleanupPlan.isPending}
+          >
+            {remoteCleanupPlan.isPending ? 'Planning...' : 'Plan Remote Cleanup'}
+          </Button>
+        </div>
+
+        {!remoteCleanupPlan.data || remoteCleanupPlan.data.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            No remote cleanup plan built yet.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div className="flex justify-end">
+              <Button
+                onClick={() => setConfirmRemoteCleanupOpen(true)}
+                variant="danger"
+                disabled={remoteCleanupExecution.isPending}
+              >
+                {remoteCleanupExecution.isPending ? 'Executing...' : 'Execute Remote Cleanup'}
+              </Button>
+            </div>
+            {remoteCleanupPlan.data.map((item) => (
+              <div
+                key={item.videoId}
+                className="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">{item.title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Winner: {item.winnerPlaylistName}
+                    </p>
+                  </div>
+                  {item.hasUnresolvedRemovals && (
+                    <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-800 dark:bg-orange-950/30 dark:text-orange-300">
+                      Missing playlist item ids
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {item.loserPlaylists.map((playlist) => (
+                    <div
+                      key={`${item.videoId}-${playlist.playlistId}`}
+                      className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                      Remove from {playlist.playlistName}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {remoteCleanupExecution.data && (
+          <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800 dark:border-green-900/50 dark:bg-green-950/20 dark:text-green-300">
+            <p className="font-semibold">Execution Summary</p>
+            <p className="mt-1">Executed: {remoteCleanupExecution.data.removalsExecuted}</p>
+            <p className="mt-1">Skipped: {remoteCleanupExecution.data.removalsSkipped}</p>
+            <p className="mt-1">Deferred: {remoteCleanupExecution.data.deferredCount}</p>
+            {remoteCleanupExecution.data.runId && (
+              <p className="mt-1">Run ID: {remoteCleanupExecution.data.runId}</p>
+            )}
+            {remoteCleanupExecution.data.errors.length > 0 && (
+              <div className="mt-3 space-y-1">
+                {remoteCleanupExecution.data.errors.map((error, index) => (
+                  <p key={`${remoteCleanupExecution.data.runId ?? 'remote-cleanup'}-${index}`}>{error}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      <Modal
+        open={confirmRemoteCleanupOpen}
+        onClose={() => setConfirmRemoteCleanupOpen(false)}
+        title="Confirm Remote Cleanup"
+      >
+        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+          <p>
+            This will remove duplicate playlist memberships on YouTube and keep only the winning playlist for each planned video.
+          </p>
+          <div className="rounded-md bg-gray-50 p-3 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+            {remoteCleanupPlan.data?.length ?? 0} videos in plan
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setConfirmRemoteCleanupOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={executeRemoteCleanup} disabled={remoteCleanupExecution.isPending}>
+              Confirm Cleanup
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Metric Counters Grid */}
       {activeRun && (

@@ -135,4 +135,41 @@ public class PlaylistOrganizer(
                 p.Id))
             .ToListAsync(ct);
     }
+
+    public async Task<List<DuplicateReviewDto>> GetDuplicateReviewAsync(CancellationToken ct = default)
+    {
+        var placements = await db.PlaylistVideos
+            .AsNoTracking()
+            .Select(pv => new
+            {
+                pv.VideoId,
+                pv.Video.YouTubeId,
+                pv.Video.Title,
+                pv.Video.ThumbnailUrl,
+                pv.PlaylistId,
+                PlaylistName = pv.Playlist.Name,
+                pv.Playlist.IsManaged,
+                pv.Playlist.Topic
+            })
+            .ToListAsync(ct);
+
+        return placements
+            .GroupBy(p => new { p.VideoId, p.YouTubeId, p.Title, p.ThumbnailUrl })
+            .Where(g => g.Select(p => p.PlaylistId).Distinct().Count() > 1)
+            .Select(g => new DuplicateReviewDto(
+                g.Key.VideoId,
+                g.Key.YouTubeId,
+                g.Key.Title,
+                g.Key.ThumbnailUrl,
+                g.Select(p => p.PlaylistId).Distinct().Count(),
+                g.OrderBy(p => p.PlaylistName)
+                    .Select(p => new DuplicatePlaylistDto(
+                        p.PlaylistId,
+                        p.PlaylistName,
+                        p.IsManaged,
+                        p.Topic))
+                    .ToList()))
+            .OrderBy(dto => dto.Title)
+            .ToList();
+    }
 }

@@ -426,7 +426,8 @@ namespace PlaylistMiner.Infrastructure.Migrations
 
                     b.HasKey("PlaylistId", "VideoId");
 
-                    b.HasIndex("VideoId");
+                    b.HasIndex("VideoId")
+                        .IsUnique();
 
                     b.ToTable("playlist_videos", (string)null);
                 });

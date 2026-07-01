@@ -4,7 +4,7 @@
 > changes (deploy, sync run, new bug). Pairs with [TASK.md](TASK.md) (the backlog).
 > Goal: any session — human or agent — can resume cold from this file.
 
-_Last updated: 2026-06-29_
+_Last updated: 2026-06-30_
 
 ## Deployment
 | Component | Where | State |
@@ -27,9 +27,16 @@ _Last updated: 2026-06-29_
 
 ## What works
 - Full + inbox sync pull real data from YouTube.
+- Local playlist membership now converges to **one playlist per video**; DB enforces unique
+  `playlist_videos.video_id`.
 - Categorization pipeline (keyword + TF-IDF; Ollama when Mac reachable) produces tag **suggestions**.
 - Operations UI (`/operations`) + dashboard card show live pipeline progress (issues #16/#17).
 - Worker heartbeat + dependency health (issue #18, partial).
+- Remote duplicate cleanup issue **#24** is partially built:
+  - dry-run planner exists,
+  - manual execute endpoint exists,
+  - Operations UI can plan + confirm + execute,
+  - executor now revalidates local state before each remote delete to tolerate stale plans.
 
 ## Recently fixed (2026-06-29)
 - **Full sync stalled forever.** Root cause: monolithic all-or-nothing sync with per-item DB
@@ -39,6 +46,15 @@ _Last updated: 2026-06-29_
   - Added **single-flight gate** (`SyncConcurrencyGate`) — two syncs never write concurrently.
   - Added **stale-run reaper** (15-min threshold) in the worker loop + on startup, so an
     interrupted run can never show "in progress" forever (completes issue #18 stale-detection).
+
+## In progress (2026-06-30)
+- **Remote YouTube duplicate cleanup (#24).**
+  - Planner: `POST /api/operations/duplicates/plan-remote-cleanup`
+  - Executor: `POST /api/operations/duplicates/execute-remote-cleanup`
+  - UI: `/operations` shows duplicate review, remote cleanup plan, confirmation modal, and
+    execution summary.
+  - Remaining: richer pipeline visibility for `remote-duplicate-cleanup`, broader drift/live
+    verification against the real YouTube account, and execution hardening polish.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

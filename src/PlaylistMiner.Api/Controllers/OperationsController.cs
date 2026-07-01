@@ -20,6 +20,8 @@ public class OperationsController(
     IQuotaTracker quotaTracker,
     IOllamaCategorizer ollamaCategorizer,
     IPipelineRunTracker pipelineRunTracker,
+    IPlaylistOrganizer playlistOrganizer,
+    IRemoteDuplicateCleanupService remoteDuplicateCleanupService,
     IConfiguration configuration) : ControllerBase
 {
     [HttpGet("health")]
@@ -69,5 +71,31 @@ public class OperationsController(
             ActiveRunStalled = activeRunStalled,
             ActiveRunPhase = activeRunPhase
         });
+    }
+
+    [HttpGet("duplicates")]
+    [ProducesResponseType<List<DuplicateReviewDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDuplicatesAsync(CancellationToken ct = default)
+    {
+        var duplicates = await playlistOrganizer.GetDuplicateReviewAsync(ct);
+        return Ok(duplicates);
+    }
+
+    [HttpPost("duplicates/plan-remote-cleanup")]
+    [ProducesResponseType<List<RemoteDuplicateCleanupItemDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> PlanRemoteCleanupAsync(CancellationToken ct = default)
+    {
+        var plan = await remoteDuplicateCleanupService.BuildPlanAsync(ct);
+        return Ok(plan);
+    }
+
+    [HttpPost("duplicates/execute-remote-cleanup")]
+    [ProducesResponseType<RemoteDuplicateCleanupResultDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ExecuteRemoteCleanupAsync(
+        [FromBody] List<RemoteDuplicateCleanupItemDto> plan,
+        CancellationToken ct = default)
+    {
+        var result = await remoteDuplicateCleanupService.ExecuteAsync(plan, ct);
+        return Ok(result);
     }
 }

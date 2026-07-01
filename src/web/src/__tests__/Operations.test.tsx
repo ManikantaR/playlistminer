@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 
 jest.mock('@/hooks/usePipeline');
+jest.mock('@/hooks/useDuplicates');
+jest.mock('@/hooks/useRemoteCleanup');
 
 import {
   usePipelineStatus,
@@ -10,7 +12,9 @@ import {
   usePipelineHealth,
   useOperationsHealth
 } from '@/hooks/usePipeline';
-import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth } from '@/types';
+import { useDuplicateReview } from '@/hooks/useDuplicates';
+import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
+import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult } from '@/types';
 import OperationsPage from '../app/operations/page';
 
 const mockUsePipelineStatus = usePipelineStatus as jest.MockedFunction<typeof usePipelineStatus>;
@@ -18,6 +22,9 @@ const mockUsePipelineHistory = usePipelineHistory as jest.MockedFunction<typeof 
 const mockUsePipelineEvents = usePipelineEvents as jest.MockedFunction<typeof usePipelineEvents>;
 const mockUsePipelineHealth = usePipelineHealth as jest.MockedFunction<typeof usePipelineHealth>;
 const mockUseOperationsHealth = useOperationsHealth as jest.MockedFunction<typeof useOperationsHealth>;
+const mockUseDuplicateReview = useDuplicateReview as jest.MockedFunction<typeof useDuplicateReview>;
+const mockUseBuildRemoteCleanupPlan = useBuildRemoteCleanupPlan as jest.MockedFunction<typeof useBuildRemoteCleanupPlan>;
+const mockUseExecuteRemoteCleanup = useExecuteRemoteCleanup as jest.MockedFunction<typeof useExecuteRemoteCleanup>;
 
 const makeQueryResult = <T,>(data: T) => ({
   data,
@@ -114,9 +121,58 @@ describe('OperationsPage', () => {
     },
   ];
 
+  const sampleDuplicates: DuplicateReview[] = [
+    {
+      videoId: 42,
+      youTubeId: 'dupvideo01',
+      title: 'Distributed Systems Deep Dive',
+      thumbnailUrl: 'https://example.com/dup.jpg',
+      playlistCount: 2,
+      playlists: [
+        { playlistId: 7, playlistName: 'AI Agents', isManaged: true, topic: 'AI Agents' },
+        { playlistId: 8, playlistName: 'Backend Systems', isManaged: true, topic: 'Backend Systems' },
+      ],
+    },
+  ];
+
+  const sampleRemotePlan: RemoteDuplicateCleanupItem[] = [
+    {
+      videoId: 42,
+      youTubeId: 'dupvideo01',
+      title: 'Distributed Systems Deep Dive',
+      winnerPlaylistId: 8,
+      winnerPlaylistName: 'Backend Systems',
+      hasUnresolvedRemovals: false,
+      loserPlaylists: [
+        { playlistId: 7, playlistName: 'AI Agents', playlistItemId: 'pli-ai' },
+      ],
+    },
+  ];
+
+  const sampleRemoteCleanupResult: RemoteDuplicateCleanupResult = {
+    videosExamined: 1,
+    removalsPlanned: 1,
+    removalsExecuted: 1,
+    removalsSkipped: 1,
+    deferredCount: 2,
+    errors: ['Missing playlist item id for one removal target.'],
+    runId: 'run-123',
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseOperationsHealth.mockReturnValue(makeQueryResult(sampleOperationsHealth));
+    mockUseDuplicateReview.mockReturnValue(makeQueryResult([]));
+    mockUseBuildRemoteCleanupPlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildRemoteCleanupPlan>);
+    mockUseExecuteRemoteCleanup.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteRemoteCleanup>);
   });
 
   it('renders idle state when no runs have executed', () => {
@@ -222,5 +278,89 @@ describe('OperationsPage', () => {
 
     expect(screen.getByText('System Stalled')).toBeInTheDocument();
     expect(screen.getByText(/has stalled/i)).toBeInTheDocument();
+  });
+
+  it('renders the duplicate review queue when managed duplicates exist', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseDuplicateReview.mockReturnValue(makeQueryResult(sampleDuplicates));
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Duplicate Review Queue')).toBeInTheDocument();
+    expect(screen.getByText('Distributed Systems Deep Dive')).toBeInTheDocument();
+    expect(screen.getByText('AI Agents')).toBeInTheDocument();
+    expect(screen.getByText('Backend Systems')).toBeInTheDocument();
+  });
+
+  it('renders remote cleanup plan results after building the plan', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseBuildRemoteCleanupPlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleRemotePlan,
+      isPending: false,
+    } as ReturnType<typeof useBuildRemoteCleanupPlan>);
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Remote Cleanup Plan')).toBeInTheDocument();
+    expect(screen.getByText('Winner: Backend Systems')).toBeInTheDocument();
+    expect(screen.getByText('Remove from AI Agents')).toBeInTheDocument();
+  });
+
+  it('requires confirmation before executing remote cleanup', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    const mutateAsync = jest.fn();
+    mockUseBuildRemoteCleanupPlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleRemotePlan,
+      isPending: false,
+    } as ReturnType<typeof useBuildRemoteCleanupPlan>);
+    mockUseExecuteRemoteCleanup.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteRemoteCleanup>);
+
+    render(<OperationsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute Remote Cleanup' }));
+
+    expect(screen.getByRole('dialog', { name: 'Confirm Remote Cleanup' })).toBeInTheDocument();
+    expect(screen.getByText(/This will remove duplicate playlist memberships on YouTube/i)).toBeInTheDocument();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('renders remote cleanup execution summary with deferred and skipped counts', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseBuildRemoteCleanupPlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleRemotePlan,
+      isPending: false,
+    } as ReturnType<typeof useBuildRemoteCleanupPlan>);
+    mockUseExecuteRemoteCleanup.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleRemoteCleanupResult,
+      isPending: false,
+    } as ReturnType<typeof useExecuteRemoteCleanup>);
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Execution Summary')).toBeInTheDocument();
+    expect(screen.getByText('Executed: 1')).toBeInTheDocument();
+    expect(screen.getByText('Skipped: 1')).toBeInTheDocument();
+    expect(screen.getByText('Deferred: 2')).toBeInTheDocument();
+    expect(screen.getByText('Missing playlist item id for one removal target.')).toBeInTheDocument();
   });
 });

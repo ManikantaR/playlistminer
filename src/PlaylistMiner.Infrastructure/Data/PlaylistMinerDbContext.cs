@@ -143,6 +143,10 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
             entity.Property(pv => pv.PlaylistItemId).HasColumnName("playlist_item_id").HasMaxLength(100);
             entity.Property(pv => pv.AddedAt).HasColumnName("added_at").IsRequired();
 
+            entity.HasIndex(pv => pv.VideoId)
+                .IsUnique()
+                .HasDatabaseName("IX_playlist_videos_video_id");
+
             entity.HasOne(pv => pv.Playlist)
                 .WithMany(p => p.PlaylistVideos)
                 .HasForeignKey(pv => pv.PlaylistId)

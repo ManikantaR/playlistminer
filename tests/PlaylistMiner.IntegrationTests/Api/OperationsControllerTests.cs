@@ -5,6 +5,9 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using PlaylistMiner.Core.DTOs;
+using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
 using PlaylistMiner.Infrastructure.Data;
 using Xunit;
@@ -111,5 +114,43 @@ public class OperationsControllerTests
 
         root.GetProperty("activeRunStalled").GetBoolean().Should().BeFalse();
         root.GetProperty("activeRunPhase").GetString().Should().Be("fetching_playlists");
+    }
+
+    [Fact]
+    public async Task Test_GetDuplicates_ReturnsDuplicateReviewItems()
+    {
+        // Arrange
+        var mockOrganizer = new Mock<IPlaylistOrganizer>();
+        mockOrganizer.Setup(o => o.GetDuplicateReviewAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new DuplicateReviewDto(
+                    42,
+                    "dupvideo01",
+                    "Distributed Systems Deep Dive",
+                    "https://example.com/dup.jpg",
+                    2,
+                    [
+                        new DuplicatePlaylistDto(7, "AI Agents", true, "AI Agents"),
+                        new DuplicatePlaylistDto(8, "Backend Systems", true, "Backend Systems")
+                    ])
+            ]);
+
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+        {
+            services.AddSingleton(mockOrganizer.Object);
+        });
+        var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/operations/duplicates");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var duplicates = await response.Content.ReadFromJsonAsync<List<DuplicateReviewDto>>();
+        duplicates.Should().NotBeNull();
+        duplicates.Should().HaveCount(1);
+        duplicates![0].VideoId.Should().Be(42);
+        duplicates[0].Playlists.Should().HaveCount(2);
     }
 }

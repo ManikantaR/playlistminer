@@ -95,6 +95,7 @@ public sealed class SyncService(
         var metadataCache = new Dictionary<string, VideoMetadataDto>();
         var allActiveVideoIds = new HashSet<string>();
         var uniqueVideoIds = new HashSet<string>();
+        var desiredPlaylistByVideoId = new Dictionary<int, int>();
 
         try
         {
@@ -180,7 +181,12 @@ public sealed class SyncService(
                     .ToList();
 
                 videosProcessed += await UpsertVideosBulkAsync(playlistMeta, ct);
-                totalLinks += await UpsertPlaylistVideosBulkAsync(playlist.YouTubeId, items, metadataCache, ct);
+                totalLinks += await UpsertPlaylistVideosBulkAsync(
+                    playlist.YouTubeId,
+                    items,
+                    metadataCache,
+                    desiredPlaylistByVideoId,
+                    ct);
 
                 await tracker.UpdateRunAsync(runId, r =>
                 {
@@ -321,46 +327,130 @@ public sealed class SyncService(
         string playlistYouTubeId,
         List<PlaylistItemDto> items,
         Dictionary<string, VideoMetadataDto> metadataCache,
+        Dictionary<int, int> desiredPlaylistByVideoId,
         CancellationToken ct)
     {
         var playlist = await db.Playlists.FirstOrDefaultAsync(p => p.YouTubeId == playlistYouTubeId, ct);
         if (playlist is null) return 0;
 
-        var ytIds = items.Select(i => i.VideoId).Distinct().ToList();
+        var uniqueItems = items
+            .Where(i => metadataCache.ContainsKey(i.VideoId))
+            .GroupBy(i => i.VideoId)
+            .Select(g => g.OrderBy(i => i.Position).First())
+            .ToList();
+
+        var ytIds = uniqueItems.Select(i => i.VideoId).Distinct().ToList();
         var videoIdByYouTubeId = await db.Videos
             .Where(v => ytIds.Contains(v.YouTubeId))
             .ToDictionaryAsync(v => v.YouTubeId, v => v.Id, ct);
 
-        var linksByVideoId = (await db.PlaylistVideos.Where(pv => pv.PlaylistId == playlist.Id).ToListAsync(ct))
-            .ToDictionary(pv => pv.VideoId);
+        var currentPlaylistItemVideoIds = uniqueItems
+            .Select(i => videoIdByYouTubeId.TryGetValue(i.VideoId, out var videoId) ? videoId : (int?)null)
+            .Where(videoId => videoId.HasValue)
+            .Select(videoId => videoId!.Value)
+            .ToHashSet();
 
-        var written = 0;
-        foreach (var item in items)
+        foreach (var item in uniqueItems)
         {
-            if (!metadataCache.ContainsKey(item.VideoId)) continue;
             if (!videoIdByYouTubeId.TryGetValue(item.VideoId, out var videoId)) continue;
 
-            if (linksByVideoId.TryGetValue(videoId, out var existing))
+            if (!desiredPlaylistByVideoId.TryGetValue(videoId, out var preferredPlaylistId))
             {
-                existing.Position = item.Position;
+                desiredPlaylistByVideoId[videoId] = playlist.Id;
+                continue;
             }
-            else
+
+            if (ShouldPreferPlaylist(playlist, preferredPlaylistId))
             {
-                var link = new PlaylistVideo
+                desiredPlaylistByVideoId[videoId] = playlist.Id;
+            }
+        }
+
+        var relevantVideoIds = currentPlaylistItemVideoIds.ToHashSet();
+        var existingLinks = await db.PlaylistVideos
+            .Where(pv => pv.PlaylistId == playlist.Id || relevantVideoIds.Contains(pv.VideoId))
+            .ToListAsync(ct);
+
+        var linksByVideoId = existingLinks
+            .GroupBy(pv => pv.VideoId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var staleLinks = existingLinks
+            .Where(pv => pv.PlaylistId == playlist.Id && !currentPlaylistItemVideoIds.Contains(pv.VideoId))
+            .ToList();
+
+        if (staleLinks.Count > 0)
+        {
+            db.PlaylistVideos.RemoveRange(staleLinks);
+        }
+
+        var written = 0;
+        foreach (var item in uniqueItems)
+        {
+            if (!videoIdByYouTubeId.TryGetValue(item.VideoId, out var videoId)) continue;
+            if (!desiredPlaylistByVideoId.TryGetValue(videoId, out var preferredPlaylistId)) continue;
+
+            linksByVideoId.TryGetValue(videoId, out var linksForVideo);
+            linksForVideo ??= [];
+
+            var linksToRemove = linksForVideo
+                .Where(pv => pv.PlaylistId != preferredPlaylistId || (preferredPlaylistId != playlist.Id && pv.PlaylistId == playlist.Id))
+                .ToList();
+
+            if (linksToRemove.Count > 0)
+            {
+                db.PlaylistVideos.RemoveRange(linksToRemove);
+                linksForVideo = linksForVideo.Except(linksToRemove).ToList();
+                linksByVideoId[videoId] = linksForVideo;
+            }
+
+            if (preferredPlaylistId != playlist.Id)
+            {
+                continue;
+            }
+
+            var existing = linksForVideo.FirstOrDefault(pv => pv.PlaylistId == playlist.Id);
+            if (existing is null)
+            {
+                existing = new PlaylistVideo
                 {
                     PlaylistId = playlist.Id,
                     VideoId = videoId,
                     Position = item.Position,
+                    PlaylistItemId = item.PlaylistItemId,
                     AddedAt = item.AddedAt
                 };
-                db.PlaylistVideos.Add(link);
-                linksByVideoId[videoId] = link;
+                db.PlaylistVideos.Add(existing);
+                linksForVideo.Add(existing);
+                linksByVideoId[videoId] = linksForVideo;
             }
+            else
+            {
+                existing.Position = item.Position;
+                existing.PlaylistItemId = item.PlaylistItemId;
+                existing.AddedAt = item.AddedAt;
+            }
+
             written++;
         }
 
         await db.SaveChangesAsync(ct);
         return written;
+    }
+
+    private bool ShouldPreferPlaylist(Playlist candidate, int existingPlaylistId)
+    {
+        if (candidate.Id == existingPlaylistId) return false;
+
+        var existingPlaylist = db.Playlists.Local.FirstOrDefault(p => p.Id == existingPlaylistId)
+            ?? db.Playlists.First(p => p.Id == existingPlaylistId);
+
+        if (existingPlaylist.IsInbox != candidate.IsInbox)
+        {
+            return !candidate.IsInbox;
+        }
+
+        return candidate.Id < existingPlaylist.Id;
     }
 
     private async Task<int> MarkMissingVideosArchivedAsync(IReadOnlySet<string> activeYouTubeIds, CancellationToken ct)
