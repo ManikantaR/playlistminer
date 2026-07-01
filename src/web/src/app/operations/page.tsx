@@ -54,6 +54,17 @@ function HealthPill({
   );
 }
 
+function getPipelineDisplayName(pipelineType: string) {
+  switch (pipelineType) {
+    case 'sync':
+      return 'Sync Job';
+    case 'remote-duplicate-cleanup':
+      return 'Remote Cleanup';
+    default:
+      return 'Categorization Job';
+  }
+}
+
 export default function OperationsPage() {
   const { data: activeRun, refetch: refetchStatus } = usePipelineStatus();
   const { data: history, refetch: refetchHistory } = usePipelineHistory();
@@ -113,6 +124,8 @@ export default function OperationsPage() {
     await remoteCleanupExecution.mutateAsync(remoteCleanupPlan.data);
   };
 
+  const hasUnresolvedRemoteCleanupItems = !!remoteCleanupPlan.data?.some(item => item.hasUnresolvedRemovals);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -152,6 +165,9 @@ export default function OperationsPage() {
   const getCountersSummary = (run: any) => {
     if (run.pipelineType === 'sync') {
       return `Upserted: ${run.videosUpserted} • Playlists: ${run.playlistsProcessed} • Links: ${run.playlistVideoLinksWritten}`;
+    }
+    if (run.pipelineType === 'remote-duplicate-cleanup') {
+      return `Executed: ${run.videosProcessed} • Skipped: ${run.videosSkipped} • Deferred: ${run.videosDeferred}`;
     }
     return `Processed: ${run.videosProcessed} • Tagged: ${run.videosTagged} • Skipped: ${run.videosSkipped}`;
   };
@@ -205,7 +221,7 @@ export default function OperationsPage() {
       if (activeRun.status === 'in_progress' || activeRun.status === 'pending') {
         return {
           title: 'System Processing',
-          message: `Currently executing: ${activeRun.pipelineType === 'sync' ? 'Sync Job' : 'Categorization Job'} (Phase: ${activeRun.phase}).`,
+          message: `Currently executing: ${getPipelineDisplayName(activeRun.pipelineType)} (Phase: ${activeRun.phase}).`,
           bg: 'bg-blue-50 text-blue-800 border-blue-200 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-900/50',
           icon: <Activity className="w-5 h-5 text-blue-500 animate-spin" />
         };
@@ -384,6 +400,8 @@ export default function OperationsPage() {
                     <span>
                       {activeRun.pipelineType === 'sync'
                         ? `${activeRun.playlistsProcessed} playlists completed`
+                        : activeRun.pipelineType === 'remote-duplicate-cleanup'
+                        ? `${activeRun.videosProcessed} removals executed`
                         : `${activeRun.videosProcessed} / ${activeRun.videosPendingTagging} videos tagged`}
                     </span>
                   </div>
@@ -396,6 +414,8 @@ export default function OperationsPage() {
                             ? activeRun.videoMetadataBatchesTotal > 0
                               ? Math.min(100, Math.round((activeRun.videosUpserted / (activeRun.videoMetadataBatchesTotal * 50)) * 100))
                               : 10
+                            : activeRun.pipelineType === 'remote-duplicate-cleanup'
+                            ? 10
                             : activeRun.videosPendingTagging > 0
                             ? Math.min(100, Math.round((activeRun.videosProcessed / activeRun.videosPendingTagging) * 100))
                             : 10
@@ -489,11 +509,16 @@ export default function OperationsPage() {
               <Button
                 onClick={() => setConfirmRemoteCleanupOpen(true)}
                 variant="danger"
-                disabled={remoteCleanupExecution.isPending}
+                disabled={remoteCleanupExecution.isPending || hasUnresolvedRemoteCleanupItems}
               >
                 {remoteCleanupExecution.isPending ? 'Executing...' : 'Execute Remote Cleanup'}
               </Button>
             </div>
+            {hasUnresolvedRemoteCleanupItems && (
+              <p className="text-sm text-orange-700 dark:text-orange-300">
+                Resolve missing playlist item ids before executing remote cleanup.
+              </p>
+            )}
             {remoteCleanupPlan.data.map((item) => (
               <div
                 key={item.videoId}
@@ -536,6 +561,11 @@ export default function OperationsPage() {
             <p className="mt-1">Deferred: {remoteCleanupExecution.data.deferredCount}</p>
             {remoteCleanupExecution.data.runId && (
               <p className="mt-1">Run ID: {remoteCleanupExecution.data.runId}</p>
+            )}
+            {remoteCleanupExecution.data.deferredCount > 0 && (
+              <p className="mt-3 font-medium">
+                {remoteCleanupExecution.data.deferredCount} removals were deferred and should be retried after quota resets.
+              </p>
             )}
             {remoteCleanupExecution.data.errors.length > 0 && (
               <div className="mt-3 space-y-1">
@@ -600,6 +630,25 @@ export default function OperationsPage() {
               <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
                 <p className="text-xs text-gray-500">Links Written</p>
                 <p className="text-xl font-bold mt-1">{activeRun.playlistVideoLinksWritten}</p>
+              </div>
+            </div>
+          ) : activeRun.pipelineType === 'remote-duplicate-cleanup' ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <p className="text-xs text-gray-500">Remote Cleanup Removals</p>
+                <p className="text-xl font-bold mt-1">{activeRun.videosProcessed}</p>
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <p className="text-xs text-gray-500">Skipped</p>
+                <p className="text-xl font-bold mt-1">{activeRun.videosSkipped}</p>
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <p className="text-xs text-gray-500">Deferred</p>
+                <p className="text-xl font-bold mt-1">{activeRun.videosDeferred}</p>
+              </div>
+              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <p className="text-xs text-gray-500">Errors</p>
+                <p className="text-xl font-bold mt-1">{activeRun.errorsCount}</p>
               </div>
             </div>
           ) : (

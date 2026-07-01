@@ -95,6 +95,15 @@ public class OperationsController(
         [FromBody] List<RemoteDuplicateCleanupItemDto> plan,
         CancellationToken ct = default)
     {
+        if (plan.Any(item => item.HasUnresolvedRemovals))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Remote cleanup plan has unresolved removals.",
+                Detail = "Resolve missing playlist item ids before executing remote cleanup."
+            });
+        }
+
         var result = await remoteDuplicateCleanupService.ExecuteAsync(plan, ct);
         return Ok(result);
     }

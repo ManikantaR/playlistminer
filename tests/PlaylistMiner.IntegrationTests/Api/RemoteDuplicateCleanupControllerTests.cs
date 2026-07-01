@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using PlaylistMiner.Core.DTOs;
@@ -84,5 +85,40 @@ public class RemoteDuplicateCleanupControllerTests
         result.Should().NotBeNull();
         result!.RemovalsExecuted.Should().Be(1);
         result.RunId.Should().Be("run-123");
+    }
+
+    [Fact]
+    public async Task Test_ExecuteRemoteCleanup_WhenPlanHasUnresolvedRemovals_Returns400ProblemDetails()
+    {
+        // Arrange
+        var mockService = new Mock<IRemoteDuplicateCleanupService>(MockBehavior.Strict);
+
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+        {
+            services.AddSingleton(mockService.Object);
+        });
+        var client = factory.CreateClient();
+
+        var request = new List<RemoteDuplicateCleanupItemDto>
+        {
+            new(
+                10,
+                "vid001",
+                "Distributed Systems Deep Dive",
+                2,
+                "Distributed Systems",
+                true,
+                [new RemoteDuplicateRemovalTargetDto(1, "Inbox", null)])
+        };
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/operations/duplicates/execute-remote-cleanup", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        problem.Should().NotBeNull();
+        problem!.Title.Should().Be("Remote cleanup plan has unresolved removals.");
+        problem.Detail.Should().Contain("playlist item ids");
     }
 }

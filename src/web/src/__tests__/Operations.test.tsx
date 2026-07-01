@@ -149,6 +149,20 @@ describe('OperationsPage', () => {
     },
   ];
 
+  const sampleRemotePlanWithUnresolved: RemoteDuplicateCleanupItem[] = [
+    {
+      videoId: 42,
+      youTubeId: 'dupvideo01',
+      title: 'Distributed Systems Deep Dive',
+      winnerPlaylistId: 8,
+      winnerPlaylistName: 'Backend Systems',
+      hasUnresolvedRemovals: true,
+      loserPlaylists: [
+        { playlistId: 7, playlistName: 'AI Agents', playlistItemId: null },
+      ],
+    },
+  ];
+
   const sampleRemoteCleanupResult: RemoteDuplicateCleanupResult = {
     videosExamined: 1,
     removalsPlanned: 1,
@@ -157,6 +171,17 @@ describe('OperationsPage', () => {
     deferredCount: 2,
     errors: ['Missing playlist item id for one removal target.'],
     runId: 'run-123',
+  };
+
+  const sampleRemoteCleanupRun: PipelineRun = {
+    ...sampleActiveSyncRun,
+    runId: 'remote-cleanup-123',
+    pipelineType: 'remote-duplicate-cleanup',
+    phase: 'executing',
+    currentMessage: 'Removed duplicate video from playlist "Inbox".',
+    videosProcessed: 3,
+    videosSkipped: 1,
+    videosDeferred: 2,
   };
 
   beforeEach(() => {
@@ -202,6 +227,20 @@ describe('OperationsPage', () => {
     expect(screen.getByText('Playlists Discovered')).toBeInTheDocument();
     expect(screen.getByText('85')).toBeInTheDocument(); // playlistItemsFetched
     expect(screen.getAllByText('40').length).toBeGreaterThan(0); // videosUpserted / links written
+  });
+
+  it('renders active remote cleanup run details with cleanup-specific labels', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult(sampleRemoteCleanupRun));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([sampleRemoteCleanupRun]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult(sampleEvents));
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Removed duplicate video from playlist "Inbox".')).toBeInTheDocument();
+    expect(screen.getByText('3 removals executed')).toBeInTheDocument();
+    expect(screen.getByText('Remote Cleanup Removals')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('renders failed run state and show error details', () => {
@@ -339,6 +378,23 @@ describe('OperationsPage', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it('disables remote cleanup execution when the plan has unresolved removals', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseBuildRemoteCleanupPlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleRemotePlanWithUnresolved,
+      isPending: false,
+    } as ReturnType<typeof useBuildRemoteCleanupPlan>);
+
+    render(<OperationsPage />);
+
+    expect(screen.getByRole('button', { name: 'Execute Remote Cleanup' })).toBeDisabled();
+    expect(screen.getByText(/Resolve missing playlist item ids before executing remote cleanup/i)).toBeInTheDocument();
+  });
+
   it('renders remote cleanup execution summary with deferred and skipped counts', () => {
     mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
     mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
@@ -362,5 +418,6 @@ describe('OperationsPage', () => {
     expect(screen.getByText('Skipped: 1')).toBeInTheDocument();
     expect(screen.getByText('Deferred: 2')).toBeInTheDocument();
     expect(screen.getByText('Missing playlist item id for one removal target.')).toBeInTheDocument();
+    expect(screen.getByText(/2 removals were deferred and should be retried after quota resets/i)).toBeInTheDocument();
   });
 });
