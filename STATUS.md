@@ -36,7 +36,9 @@ _Last updated: 2026-06-30_
   - dry-run planner exists,
   - manual execute endpoint exists,
   - Operations UI can plan + confirm + execute,
-  - executor now revalidates local state before each remote delete to tolerate stale plans.
+  - executor now revalidates local state before each remote delete to tolerate stale plans,
+  - planner now hydrates missing loser-side `playlist_item_id` values from YouTube and persists
+    them locally when it can reconcile a match.
 
 ## Recently fixed (2026-06-29)
 - **Full sync stalled forever.** Root cause: monolithic all-or-nothing sync with per-item DB
@@ -53,8 +55,10 @@ _Last updated: 2026-06-30_
   - Executor: `POST /api/operations/duplicates/execute-remote-cleanup`
   - UI: `/operations` shows duplicate review, remote cleanup plan, confirmation modal, and
     execution summary.
-  - Remaining: richer pipeline visibility for `remote-duplicate-cleanup`, broader drift/live
-    verification against the real YouTube account, and execution hardening polish.
+  - Latest live dry-run before reconciliation rollout: planner returned **1,104** duplicate
+    candidates, all unresolved because loser links lacked `playlist_item_id`.
+  - Remaining: redeploy and re-run live planner after reconciliation, then broaden drift/live
+    verification and execution hardening polish.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

@@ -4,7 +4,7 @@
 > session can resume without re-deriving context. Pairs with [STATUS.md](STATUS.md) (live state).
 > Convention: `[ ]` todo · `[~]` in progress · `[x]` done. Keep issue numbers in sync.
 
-_Last updated: 2026-06-29_
+_Last updated: 2026-06-30_
 
 ## In progress / just landed
 - [x] **Incremental, checkpointed sync** — playlist-by-playlist, committed per playlist, bulk DB
@@ -30,7 +30,7 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 - [ ] #5 Executor — wire `MoveVideoAsync`, ~20/batch, move-budget, idempotent, newest-first, undo
 - [ ] #21 Organize observability — activity feed + move-budget quota meter on `/operations`
 - [ ] #22 Telegram per-run organize digest (primary "what the agent did" channel)
-- [~] #24 Remote YouTube duplicate cleanup planner + executor — planner + manual executor + Ops UI landed; continue hardening / live verification
+- [~] #24 Remote YouTube duplicate cleanup planner + executor — planner + manual executor + Ops UI landed; playlist-item reconciliation added; continue live verification and execution hardening
 - [ ] #8 Ollama reachability gating + `POST /api/agent/process-now` + button
 - [ ] #7 `ConsolidateAsync` real merge of overlapping-topic playlists (later)
 

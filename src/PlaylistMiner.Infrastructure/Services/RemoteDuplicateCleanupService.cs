@@ -16,19 +16,14 @@ public sealed class RemoteDuplicateCleanupService(
 {
     public async Task<List<RemoteDuplicateCleanupItemDto>> BuildPlanAsync(CancellationToken ct = default)
     {
-        var placements = await db.PlaylistVideos
-            .AsNoTracking()
-            .Select(pv => new
-            {
-                pv.VideoId,
-                pv.Video.YouTubeId,
-                pv.Video.Title,
-                pv.PlaylistId,
-                PlaylistName = pv.Playlist.Name,
-                pv.Playlist.IsInbox,
-                pv.PlaylistItemId
-            })
-            .ToListAsync(ct);
+        var placements = await LoadPlacementsAsync(ct);
+        var unresolvedLosers = GetUnresolvedLoserPlacements(placements);
+
+        if (unresolvedLosers.Count > 0)
+        {
+            await HydrateMissingPlaylistItemIdsAsync(unresolvedLosers, ct);
+            placements = await LoadPlacementsAsync(ct);
+        }
 
         var plan = placements
             .GroupBy(p => new { p.VideoId, p.YouTubeId, p.Title })
@@ -65,6 +60,102 @@ public sealed class RemoteDuplicateCleanupService(
 
         logger.LogInformation("Built remote duplicate cleanup plan with {Count} duplicate videos.", plan.Count);
         return plan;
+    }
+
+    private async Task<List<PlaylistPlacement>> LoadPlacementsAsync(CancellationToken ct)
+    {
+        return await db.PlaylistVideos
+            .AsNoTracking()
+            .Select(pv => new PlaylistPlacement(
+                pv.VideoId,
+                pv.Video.YouTubeId,
+                pv.Video.Title,
+                pv.PlaylistId,
+                pv.Playlist.YouTubeId,
+                pv.Playlist.Name,
+                pv.Playlist.IsInbox,
+                pv.PlaylistItemId))
+            .ToListAsync(ct);
+    }
+
+    private static List<PlaylistPlacement> GetUnresolvedLoserPlacements(List<PlaylistPlacement> placements)
+    {
+        return placements
+            .GroupBy(p => new { p.VideoId, p.YouTubeId, p.Title })
+            .Where(g => g.Select(p => p.PlaylistId).Distinct().Count() > 1)
+            .SelectMany(g =>
+            {
+                var winnerPlaylistId = g
+                    .OrderBy(p => p.IsInbox)
+                    .ThenBy(p => p.PlaylistId)
+                    .Select(p => p.PlaylistId)
+                    .First();
+
+                return g.Where(p => p.PlaylistId != winnerPlaylistId && string.IsNullOrWhiteSpace(p.PlaylistItemId));
+            })
+            .ToList();
+    }
+
+    private async Task HydrateMissingPlaylistItemIdsAsync(
+        List<PlaylistPlacement> unresolvedLosers,
+        CancellationToken ct)
+    {
+        foreach (var playlistGroup in unresolvedLosers.GroupBy(p => new { p.PlaylistId, p.PlaylistYouTubeId }))
+        {
+            if (await quotaTracker.IsQuotaExhaustedAsync(ct))
+            {
+                logger.LogWarning(
+                    "Skipping playlist item id hydration for playlist {PlaylistId} because YouTube quota is exhausted.",
+                    playlistGroup.Key.PlaylistId);
+                break;
+            }
+
+            try
+            {
+                var playlistItems = await youTubeApiClient.GetPlaylistItemsAsync(playlistGroup.Key.PlaylistYouTubeId, ct);
+                var remoteItemIdByVideoYouTubeId = playlistItems
+                    .GroupBy(item => item.VideoId)
+                    .ToDictionary(g => g.Key, g => g.OrderBy(item => item.Position).First().PlaylistItemId);
+
+                var videoIds = playlistGroup.Select(p => p.VideoId).Distinct().ToList();
+                var localLinks = await db.PlaylistVideos
+                    .Where(pv => pv.PlaylistId == playlistGroup.Key.PlaylistId && videoIds.Contains(pv.VideoId))
+                    .Include(pv => pv.Video)
+                    .ToListAsync(ct);
+
+                var changed = false;
+                foreach (var link in localLinks.Where(link => string.IsNullOrWhiteSpace(link.PlaylistItemId)))
+                {
+                    if (!remoteItemIdByVideoYouTubeId.TryGetValue(link.Video.YouTubeId, out var playlistItemId))
+                    {
+                        continue;
+                    }
+
+                    link.PlaylistItemId = playlistItemId;
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+            catch (QuotaExhaustedException)
+            {
+                await quotaTracker.RecordQuotaExhaustedAsync(ct);
+                logger.LogWarning(
+                    "YouTube quota exhausted while hydrating missing playlist item ids for playlist {PlaylistId}.",
+                    playlistGroup.Key.PlaylistId);
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Failed hydrating playlist item ids for playlist {PlaylistId}. Unresolved removals will remain in the plan.",
+                    playlistGroup.Key.PlaylistId);
+            }
+        }
     }
 
     public async Task<RemoteDuplicateCleanupResultDto> ExecuteAsync(
@@ -231,4 +322,14 @@ public sealed class RemoteDuplicateCleanupService(
 
         return (true, string.Empty, playlist.YouTubeId, loserLink.PlaylistItemId);
     }
+
+    private sealed record PlaylistPlacement(
+        int VideoId,
+        string YouTubeId,
+        string Title,
+        int PlaylistId,
+        string PlaylistYouTubeId,
+        string PlaylistName,
+        bool IsInbox,
+        string? PlaylistItemId);
 }
