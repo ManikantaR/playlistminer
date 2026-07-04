@@ -40,6 +40,11 @@ _Last updated: 2026-07-04_
   - planner hydrates missing loser-side `playlist_item_id` values from YouTube and persists
     them locally when it can reconcile a match,
   - first live YouTube batch already executed successfully.
+- Organize planner issue **#4** is now on `main` (July 4, 2026):
+  - `POST /api/organize/plan` returns a dry-run plan from the configured inbox playlist,
+  - `/organize` renders the preview UI with action/quota summary cards,
+  - the planner currently uses the best existing tag suggestion/manual tag as the topic signal,
+  - it previews `create_playlist`, `move`, and `review` actions without mutating YouTube.
 
 ## Recently fixed (2026-06-29)
 - **Full sync stalled forever.** Root cause: monolithic all-or-nothing sync with per-item DB
@@ -69,6 +74,13 @@ _Last updated: 2026-07-04_
     **1,099 duplicate videos / 1,350 removals** immediately after the batch.
   - Remaining: continue staged live cleanup batches, broaden drift/live verification, and finish
     execution hardening polish.
+- **Organize planner rollout.**
+  - Live deploy verification on NAS succeeded.
+  - `POST /api/organize/plan` currently returns `0` videos / `0` actions on the live system
+    because there are no inbox videos pending at the moment.
+  - Screenshot artifacts captured:
+    `docs/assets/organize-page-initial.png`
+    `docs/assets/organize-page-empty-plan.png`
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
