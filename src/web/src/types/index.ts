@@ -91,6 +91,27 @@ export interface RemoteDuplicateCleanupResult {
   runId: string | null;
 }
 
+export interface OrganizePlanItem {
+  action: 'create_playlist' | 'move' | 'review' | 'no_op';
+  videoId: number | null;
+  youTubeId: string | null;
+  title: string | null;
+  sourcePlaylistName: string | null;
+  targetPlaylistName: string | null;
+  targetPlaylistId: number | null;
+  topic: string | null;
+  confidence: number | null;
+  estimatedQuotaCost: number;
+  reason: string;
+}
+
+export interface OrganizePlan {
+  videosExamined: number;
+  totalActions: number;
+  totalEstimatedQuotaCost: number;
+  items: OrganizePlanItem[];
+}
+
 export interface PagedResult<T> {
   items: T[];
   totalCount: number;

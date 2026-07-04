@@ -1,0 +1,253 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using PlaylistMiner.Core.DTOs;
+using PlaylistMiner.Core.Interfaces;
+using PlaylistMiner.Core.Models;
+using PlaylistMiner.Infrastructure.Data;
+using PlaylistMiner.Infrastructure.Services;
+
+namespace PlaylistMiner.UnitTests.Services;
+
+[Trait("Category", "Unit")]
+public class OrganizePlannerServiceTests
+{
+    private static PlaylistMinerDbContext CreateDb()
+    {
+        var opts = new DbContextOptionsBuilder<PlaylistMinerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        return new PlaylistMinerDbContext(opts);
+    }
+
+    [Fact]
+    public async Task Test_BuildPlan_WhenInboxVideoMatchesExistingManagedPlaylist_PlansMove()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLinbox",
+            Name = "Incoming",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var managed = new Playlist
+        {
+            Id = 2,
+            YouTubeId = "PLmanaged",
+            Name = "AI Agents",
+            IsManaged = true,
+            Topic = "AI Agents",
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var tag = new Tag
+        {
+            Id = 10,
+            Name = "AI Agents",
+            Slug = "ai-agents",
+            CreatedAt = now
+        };
+        var video = new Video
+        {
+            Id = 100,
+            YouTubeId = "vid001",
+            Title = "Agentic Systems",
+            Description = "desc",
+            ChannelName = "Channel",
+            ChannelId = "UC1",
+            ThumbnailUrl = "https://example.com/thumb.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.AddRange(inbox, managed);
+        db.Tags.Add(tag);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = inbox.Id,
+            VideoId = video.Id,
+            Position = 0,
+            AddedAt = now,
+            PlaylistItemId = "pli-inbox"
+        });
+        db.VideoTags.Add(new VideoTag
+        {
+            VideoId = video.Id,
+            TagId = tag.Id,
+            Source = TagSource.Ollama,
+            Confidence = 0.91f,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        IOrganizePlannerService service = new OrganizePlannerService(db, NullLogger<OrganizePlannerService>.Instance);
+
+        var plan = await service.BuildPlanAsync();
+
+        plan.VideosExamined.Should().Be(1);
+        plan.Items.Should().ContainSingle();
+        plan.Items[0].Action.Should().Be("move");
+        plan.Items[0].TargetPlaylistId.Should().Be(managed.Id);
+        plan.Items[0].TargetPlaylistName.Should().Be("AI Agents");
+        plan.Items[0].Topic.Should().Be("AI Agents");
+        plan.Items[0].EstimatedQuotaCost.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task Test_BuildPlan_WhenManagedPlaylistMissing_PlansPlaylistCreationThenMove()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLinbox",
+            Name = "Incoming",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var tag = new Tag
+        {
+            Id = 10,
+            Name = "Distributed Systems",
+            Slug = "distributed-systems",
+            CreatedAt = now
+        };
+        var video = new Video
+        {
+            Id = 100,
+            YouTubeId = "vid001",
+            Title = "Queues and Streams",
+            Description = "desc",
+            ChannelName = "Channel",
+            ChannelId = "UC1",
+            ThumbnailUrl = "https://example.com/thumb.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.Add(inbox);
+        db.Tags.Add(tag);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = inbox.Id,
+            VideoId = video.Id,
+            Position = 0,
+            AddedAt = now,
+            PlaylistItemId = "pli-inbox"
+        });
+        db.VideoTags.Add(new VideoTag
+        {
+            VideoId = video.Id,
+            TagId = tag.Id,
+            Source = TagSource.RuleBased,
+            Confidence = 0.87f,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        IOrganizePlannerService service = new OrganizePlannerService(db, NullLogger<OrganizePlannerService>.Instance);
+
+        var plan = await service.BuildPlanAsync();
+
+        plan.Items.Should().HaveCount(2);
+        plan.Items[0].Action.Should().Be("create_playlist");
+        plan.Items[0].TargetPlaylistName.Should().Be("Distributed Systems");
+        plan.Items[0].EstimatedQuotaCost.Should().Be(50);
+        plan.Items[1].Action.Should().Be("move");
+        plan.Items[1].TargetPlaylistName.Should().Be("Distributed Systems");
+        plan.Items[1].EstimatedQuotaCost.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task Test_BuildPlan_WhenConfidenceBelowThreshold_PlansReview()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLinbox",
+            Name = "Incoming",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var tag = new Tag
+        {
+            Id = 10,
+            Name = "TypeScript",
+            Slug = "typescript",
+            CreatedAt = now
+        };
+        var video = new Video
+        {
+            Id = 100,
+            YouTubeId = "vid001",
+            Title = "Tentative TypeScript Intro",
+            Description = "desc",
+            ChannelName = "Channel",
+            ChannelId = "UC1",
+            ThumbnailUrl = "https://example.com/thumb.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.Add(inbox);
+        db.Tags.Add(tag);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = inbox.Id,
+            VideoId = video.Id,
+            Position = 0,
+            AddedAt = now,
+            PlaylistItemId = "pli-inbox"
+        });
+        db.VideoTags.Add(new VideoTag
+        {
+            VideoId = video.Id,
+            TagId = tag.Id,
+            Source = TagSource.TfIdf,
+            Confidence = 0.42f,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        IOrganizePlannerService service = new OrganizePlannerService(db, NullLogger<OrganizePlannerService>.Instance);
+
+        var plan = await service.BuildPlanAsync();
+
+        plan.Items.Should().ContainSingle();
+        plan.Items[0].Action.Should().Be("review");
+        plan.Items[0].EstimatedQuotaCost.Should().Be(0);
+        plan.Items[0].TargetPlaylistName.Should().BeNull();
+        plan.Items[0].Reason.Should().Contain("confidence");
+    }
+}

@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Settings,
   Activity,
+  Wand2,
 } from 'lucide-react';
 
 const links = [
@@ -19,6 +20,7 @@ const links = [
   { href: '/videos', label: 'Videos', icon: Video },
   { href: '/suggestions', label: 'Suggestions', icon: Lightbulb },
   { href: '/playlists', label: 'Playlists', icon: ListMusic },
+  { href: '/organize', label: 'Organize', icon: Wand2 },
   { href: '/tags', label: 'Tags', icon: Tags },
   { href: '/operations', label: 'Operations', icon: Activity },
   { href: '/import', label: 'Import', icon: Upload },
