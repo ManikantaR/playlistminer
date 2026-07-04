@@ -4,7 +4,7 @@
 > changes (deploy, sync run, new bug). Pairs with [TASK.md](TASK.md) (the backlog).
 > Goal: any session — human or agent — can resume cold from this file.
 
-_Last updated: 2026-06-30_
+_Last updated: 2026-07-04_
 
 ## Deployment
 | Component | Where | State |
@@ -32,13 +32,14 @@ _Last updated: 2026-06-30_
 - Categorization pipeline (keyword + TF-IDF; Ollama when Mac reachable) produces tag **suggestions**.
 - Operations UI (`/operations`) + dashboard card show live pipeline progress (issues #16/#17).
 - Worker heartbeat + dependency health (issue #18, partial).
-- Remote duplicate cleanup issue **#24** is partially built:
+- Remote duplicate cleanup issue **#24** is merged on `main` (PR #25, merged July 1, 2026):
   - dry-run planner exists,
   - manual execute endpoint exists,
-  - Operations UI can plan + confirm + execute,
-  - executor now revalidates local state before each remote delete to tolerate stale plans,
-  - planner now hydrates missing loser-side `playlist_item_id` values from YouTube and persists
-    them locally when it can reconcile a match.
+  - Operations UI can plan + confirm + execute in controlled batches,
+  - executor revalidates local state before each remote delete to tolerate stale plans,
+  - planner hydrates missing loser-side `playlist_item_id` values from YouTube and persists
+    them locally when it can reconcile a match,
+  - first live YouTube batch already executed successfully.
 
 ## Recently fixed (2026-06-29)
 - **Full sync stalled forever.** Root cause: monolithic all-or-nothing sync with per-item DB
@@ -49,14 +50,18 @@ _Last updated: 2026-06-30_
   - Added **stale-run reaper** (15-min threshold) in the worker loop + on startup, so an
     interrupted run can never show "in progress" forever (completes issue #18 stale-detection).
 
-## In progress (2026-06-30)
-- **Remote YouTube duplicate cleanup (#24).**
+## In progress (2026-07-04)
+- **GitHub/tracker reconciliation.**
+  - `main` contains merged work for `#24`, and likely-closable work for `#16/#17/#18`.
+  - Local trackers had drifted behind GitHub state; they are being updated to reflect merged work
+    versus still-open issues.
+- **Remote duplicate cleanup rollout (post-merge hardening).**
   - Planner: `POST /api/operations/duplicates/plan-remote-cleanup`
   - Executor: `POST /api/operations/duplicates/execute-remote-cleanup`
   - UI: `/operations` shows duplicate review, remote cleanup plan, confirmation modal, batch-size
     control, and execution summary.
-  - Reconciliation rollout result: planner now resolves loser-side `playlist_item_id` values;
-    the live plan became **1,104 resolved / 0 unresolved**.
+  - Reconciliation rollout result: planner resolves loser-side `playlist_item_id` values; the
+    live plan became **1,104 resolved / 0 unresolved**.
   - Controlled live batch result: executed **5/5** planned removals successfully on YouTube
     (`runId: a8dfb170-3030-4502-96ea-a734068bb078`).
   - Post-run verification: planner dropped from **1,104 duplicate videos / 1,355 removals** to
