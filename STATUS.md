@@ -92,7 +92,14 @@ _Last updated: 2026-07-04_
     `GET /api/operations/activity`
     `GET /api/operations/quota`
   - `/operations` now includes the move-budget quota meter and activity feed used for issue `#21`.
-  - Remaining: deploy to NAS, capture screenshot artifact, and close the issue after live verify.
+  - NAS deploy verification succeeded on July 4, 2026.
+  - Live endpoint check:
+    - `/api/operations/quota` returned `movesUsedToday: 0`, `moveBudget: 80`,
+      `unitsRemaining: 80`, `resetsAt: 2026-07-05T07:00:00Z`
+    - `/api/operations/activity?limit=3` returned the newest remote cleanup events from run
+      `a8dfb170-3030-4502-96ea-a734068bb078`
+  - Screenshot artifact captured:
+    `docs/assets/operations-observability-live.png`
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
