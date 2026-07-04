@@ -51,10 +51,11 @@ _Last updated: 2026-07-04_
     interrupted run can never show "in progress" forever (completes issue #18 stale-detection).
 
 ## In progress (2026-07-04)
-- **GitHub/tracker reconciliation.**
-  - `main` contains merged work for `#24`, and likely-closable work for `#16/#17/#18`.
-  - Local trackers had drifted behind GitHub state; they are being updated to reflect merged work
-    versus still-open issues.
+- **GitHub/tracker reconciliation completed.**
+  - `main` contains merged work for `#24`; `#9/#16/#17/#18/#19` are now closed after audit.
+  - `docs/OPS-RUNBOOK.md` captures the NAS deploy + sync babysitting flow and the
+    OAuth -> first full sync verification path used to close out `#19` and the remaining
+    documentation acceptance for `#9`.
 - **Remote duplicate cleanup rollout (post-merge hardening).**
   - Planner: `POST /api/operations/duplicates/plan-remote-cleanup`
   - Executor: `POST /api/operations/duplicates/execute-remote-cleanup`
