@@ -12,6 +12,7 @@ public sealed class OperationsObservabilityService(
     TimeProvider? timeProvider = null) : IOperationsObservabilityService
 {
     private const int DefaultMoveBudget = 80;
+    private static readonly string[] MoveBudgetPipelineTypes = ["remote-duplicate-cleanup", "organize-execute", "organize-execution"];
     private static readonly TimeZoneInfo PacificTz = TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles");
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -26,6 +27,8 @@ public sealed class OperationsObservabilityService(
                 on pipelineEvent.RunId equals pipelineRun.RunId into runGroup
             from pipelineRun in runGroup.DefaultIfEmpty()
             where pipelineEvent.RunId != "worker-heartbeat"
+                  && pipelineRun != null
+                  && MoveBudgetPipelineTypes.Contains(pipelineRun.PipelineType)
             orderby pipelineEvent.OccurredAt descending, pipelineEvent.Id descending
             select new OperationsActivityItemDto(
                 pipelineEvent.Id,
@@ -64,7 +67,7 @@ public sealed class OperationsObservabilityService(
 
         var movesUsedToday = await db.PipelineRuns
             .AsNoTracking()
-            .Where(run => IsMoveBudgetRun(run.PipelineType)
+            .Where(run => MoveBudgetPipelineTypes.Contains(run.PipelineType)
                           && run.StartedAt >= dayStartUtc
                           && run.StartedAt < dayEndUtc)
             .SumAsync(run => run.VideosProcessed, ct);
@@ -84,14 +87,12 @@ public sealed class OperationsObservabilityService(
             message);
     }
 
-    private static bool IsMoveBudgetRun(string pipelineType)
-        => pipelineType is "remote-duplicate-cleanup" or "organize-execute" or "organize-execution";
-
     private static string GetPipelineLabel(string? pipelineType)
         => pipelineType switch
         {
             "sync" => "Sync Job",
             "remote-duplicate-cleanup" => "Remote Cleanup",
+            "categorization" => "Categorization Job",
             "organize-execute" => "Organize Execute",
             "organize-execution" => "Organize Execute",
             _ => "Organize Activity"

@@ -95,13 +95,13 @@ public class OperationsObservabilityServiceTests
         var result = await service.GetActivityAsync(limit: 2, offset: 0);
 
         // Assert
-        result.TotalCount.Should().Be(3);
-        result.HasMore.Should().BeTrue();
+        result.TotalCount.Should().Be(2);
+        result.HasMore.Should().BeFalse();
         result.Items.Should().HaveCount(2);
         result.Items[0].Message.Should().Be("Skipped one removal because the winner playlist changed.");
         result.Items[0].PipelineType.Should().Be("remote-duplicate-cleanup");
         result.Items[0].PipelineLabel.Should().Be("Remote Cleanup");
-        result.Items[1].Message.Should().Be("Sync failed due to token refresh error.");
+        result.Items[1].Message.Should().Be("Removed duplicate video from playlist \"Inbox\".");
     }
 
     [Fact]

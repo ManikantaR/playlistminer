@@ -216,9 +216,11 @@ public class OperationsControllerTests
         var payload = await response.Content.ReadFromJsonAsync<OperationsActivityFeedDto>();
         payload.Should().NotBeNull();
         payload!.Items.Should().HaveCount(1);
-        payload.TotalCount.Should().Be(2);
-        payload.HasMore.Should().BeTrue();
-        payload.Items[0].Message.Should().Be("Sync failed due to token refresh error.");
+        payload.TotalCount.Should().Be(1);
+        payload.HasMore.Should().BeFalse();
+        payload.Items[0].PipelineType.Should().Be("remote-duplicate-cleanup");
+        payload.Items[0].PipelineLabel.Should().Be("Remote Cleanup");
+        payload.Items[0].Message.Should().Be("Removed duplicate video from playlist \"Inbox\".");
     }
 
     [Fact]
