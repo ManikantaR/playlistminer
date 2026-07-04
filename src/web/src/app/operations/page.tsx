@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { usePipelineStatus, usePipelineHistory, usePipelineEvents, usePipelineHealth, useOperationsHealth } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
+import { useOperationsActivity, useOperationsQuota } from '@/hooks/useOperations';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -75,6 +76,10 @@ export default function OperationsPage() {
   const { data: history, refetch: refetchHistory } = usePipelineHistory();
   const { data: health, refetch: refetchHealth } = usePipelineHealth();
   const { data: opsHealth, refetch: refetchOpsHealth } = useOperationsHealth();
+  const [activityOffset, setActivityOffset] = useState(0);
+  const activityLimit = 10;
+  const { data: activityFeed, refetch: refetchActivity } = useOperationsActivity(activityLimit, activityOffset);
+  const { data: operationsQuota, isLoading: isOperationsQuotaLoading, refetch: refetchOperationsQuota } = useOperationsQuota();
   const { data: duplicates } = useDuplicateReview();
   const remoteCleanupPlan = useBuildRemoteCleanupPlan();
   const remoteCleanupExecution = useExecuteRemoteCleanup();
@@ -117,6 +122,8 @@ export default function OperationsPage() {
     refetchHistory();
     refetchHealth();
     refetchOpsHealth();
+    refetchActivity();
+    refetchOperationsQuota();
     if (selectedRunId) refetchEvents();
   };
 
@@ -277,6 +284,10 @@ export default function OperationsPage() {
   };
 
   const banner = getBannerState();
+  const quotaResetDistance = operationsQuota
+    ? getResetDistance(operationsQuota.resetsAt)
+    : null;
+  const activityItems = activityFeed?.items ?? [];
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -463,6 +474,125 @@ export default function OperationsPage() {
                       }}
                     />
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <Card className="xl:col-span-1">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Organize Move Budget</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Tracks today&apos;s YouTube mutation budget across organize-style actions.
+              </p>
+            </div>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              !operationsQuota || isOperationsQuotaLoading
+                ? 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
+                : operationsQuota.isBlocked
+                ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-300'
+                : 'bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
+            }`}>
+              {!operationsQuota || isOperationsQuotaLoading
+                ? 'Checking…'
+                : operationsQuota.isBlocked
+                ? 'Blocked'
+                : 'Available'}
+            </span>
+          </div>
+
+          {!operationsQuota || isOperationsQuotaLoading ? (
+            <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+              Checking move budget…
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div className={`rounded-lg border p-4 ${
+                operationsQuota.isBlocked
+                  ? 'border-orange-200 bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/20'
+                  : 'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20'
+              }`}>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {`moves: ${operationsQuota.movesUsedToday} / ${operationsQuota.moveBudget}`}
+                </p>
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                  {operationsQuota.isBlocked
+                    ? `Move budget blocked until reset in ${quotaResetDistance}.`
+                    : `Resets in ${quotaResetDistance}.`}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/60">
+                  <p className="text-xs text-gray-500">Moves Used</p>
+                  <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{operationsQuota.movesUsedToday}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800/60">
+                  <p className="text-xs text-gray-500">Remaining</p>
+                  <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100">{operationsQuota.unitsRemaining}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        <Card className="xl:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Organize Activity</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Recent organize-side actions and worker decisions, newest first.
+              </p>
+            </div>
+            {activityFeed && (
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                {activityFeed.totalCount} total
+              </span>
+            )}
+          </div>
+
+          {!activityFeed ? (
+            <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+              Checking recent organize activity…
+            </div>
+          ) : activityItems.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+              No organize-side activity has been recorded yet.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {activityItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.message}</p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {item.pipelineLabel} · {item.phase} · {new Date(item.occurredAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      item.level === 'error'
+                        ? 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300'
+                        : item.level === 'warning'
+                        ? 'bg-orange-100 text-orange-800 dark:bg-orange-950/30 dark:text-orange-300'
+                        : 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300'
+                    }`}>
+                      {item.level}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {activityFeed.hasMore && (
+                <div className="flex justify-end">
+                  <Button variant="secondary" onClick={() => setActivityOffset(activityOffset + activityLimit)}>
+                    Load Older
+                  </Button>
                 </div>
               )}
             </div>
@@ -804,4 +934,21 @@ export default function OperationsPage() {
       </Card>
     </div>
   );
+}
+
+function getResetDistance(resetsAt: string) {
+  const diffMs = Math.max(0, new Date(resetsAt).getTime() - Date.now());
+  const totalMinutes = Math.ceil(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `${minutes}m`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${minutes}m`;
 }

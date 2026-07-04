@@ -30,7 +30,7 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 - [ ] #3 Topic→managed-playlist materialization (auto-create)
 - [x] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI preview
 - [ ] #5 Executor — wire `MoveVideoAsync`, ~20/batch, move-budget, idempotent, newest-first, undo
-- [ ] #21 Organize observability — activity feed + move-budget quota meter on `/operations`
+- [x] #21 Organize observability — activity feed + move-budget quota meter on `/operations`
 - [ ] #22 Telegram per-run organize digest (primary "what the agent did" channel)
 - [x] #24 Remote YouTube duplicate cleanup planner + executor — merged to `main` via PR #25;
   planner, reconciliation, controlled execution, and first live YouTube batch are done

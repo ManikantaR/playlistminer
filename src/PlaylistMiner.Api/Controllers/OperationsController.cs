@@ -18,6 +18,7 @@ public class OperationsController(
     PlaylistMinerDbContext db,
     ITokenProvider tokenProvider,
     IQuotaTracker quotaTracker,
+    IOperationsObservabilityService operationsObservabilityService,
     IOllamaCategorizer ollamaCategorizer,
     IPipelineRunTracker pipelineRunTracker,
     IPlaylistOrganizer playlistOrganizer,
@@ -81,6 +82,25 @@ public class OperationsController(
     {
         var duplicates = await playlistOrganizer.GetDuplicateReviewAsync(ct);
         return Ok(duplicates);
+    }
+
+    [HttpGet("activity")]
+    [ProducesResponseType<OperationsActivityFeedDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetActivityAsync(
+        [FromQuery] int limit = 10,
+        [FromQuery] int offset = 0,
+        CancellationToken ct = default)
+    {
+        var activity = await operationsObservabilityService.GetActivityAsync(limit, offset, ct);
+        return Ok(activity);
+    }
+
+    [HttpGet("quota")]
+    [ProducesResponseType<OperationsQuotaDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQuotaAsync(CancellationToken ct = default)
+    {
+        var quota = await operationsObservabilityService.GetMoveBudgetAsync(ct);
+        return Ok(quota);
     }
 
     [HttpPost("duplicates/plan-remote-cleanup")]

@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePipelineStatus } from '@/hooks/usePipeline';
+import { useOperationsQuota } from '@/hooks/useOperations';
 import Card from '@/components/ui/Card';
 import { Play, CheckCircle, XCircle, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 
 export default function PipelineCard() {
   const { data: run, isLoading } = usePipelineStatus();
+  const { data: quota, isLoading: isQuotaLoading } = useOperationsQuota();
   const [elapsed, setElapsed] = useState<string>('');
 
   useEffect(() => {
@@ -46,10 +48,15 @@ export default function PipelineCard() {
   if (!run) {
     return (
       <Card>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Operations Status</h3>
             <p className="text-sm text-gray-500 mt-1">No background tasks have run yet.</p>
+            <p className="text-xs text-gray-500 mt-2">
+              {isQuotaLoading || !quota
+                ? 'Move budget: Checking…'
+                : `Move budget: ${quota.movesUsedToday} / ${quota.moveBudget}${quota.isBlocked ? ' blocked' : ''}`}
+            </p>
           </div>
           <Link
             href="/operations"
@@ -203,6 +210,17 @@ export default function PipelineCard() {
               </div>
             </div>
           )}
+        </div>
+        <div className={`rounded-lg border px-3 py-2 text-xs ${
+          !quota || isQuotaLoading
+            ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-400'
+            : quota.isBlocked
+            ? 'border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/50 dark:bg-orange-950/20 dark:text-orange-300'
+            : 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300'
+        }`}>
+          {!quota || isQuotaLoading
+            ? 'Organize move budget: Checking…'
+            : `Organize move budget: ${quota.movesUsedToday} / ${quota.moveBudget} · resets ${new Date(quota.resetsAt).toLocaleTimeString()}`}
         </div>
       </div>
     </Card>

@@ -153,4 +153,109 @@ public class OperationsControllerTests
         duplicates![0].VideoId.Should().Be(42);
         duplicates[0].Playlists.Should().HaveCount(2);
     }
+
+    [Fact]
+    public async Task Test_GetActivity_ReturnsPagedNewestFirstItems()
+    {
+        // Arrange
+        using var factory = new PlaylistMinerWebAppFactory();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PlaylistMinerDbContext>();
+            var now = DateTime.UtcNow;
+
+            db.PipelineRuns.AddRange(
+                new PipelineRun
+                {
+                    RunId = "run-activity-1",
+                    PipelineType = "remote-duplicate-cleanup",
+                    Status = "completed",
+                    Phase = "completed",
+                    StartedAt = now.AddMinutes(-10),
+                    UpdatedAt = now.AddMinutes(-8),
+                    CompletedAt = now.AddMinutes(-8)
+                },
+                new PipelineRun
+                {
+                    RunId = "run-activity-2",
+                    PipelineType = "sync",
+                    Status = "failed",
+                    Phase = "failed",
+                    StartedAt = now.AddMinutes(-20),
+                    UpdatedAt = now.AddMinutes(-18),
+                    CompletedAt = now.AddMinutes(-18)
+                });
+
+            db.PipelineEvents.AddRange(
+                new PipelineEvent
+                {
+                    RunId = "run-activity-1",
+                    OccurredAt = now.AddMinutes(-3),
+                    Level = "info",
+                    Phase = "completed",
+                    Message = "Removed duplicate video from playlist \"Inbox\"."
+                },
+                new PipelineEvent
+                {
+                    RunId = "run-activity-2",
+                    OccurredAt = now.AddMinutes(-2),
+                    Level = "error",
+                    Phase = "failed",
+                    Message = "Sync failed due to token refresh error."
+                });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/operations/activity?limit=1&offset=0");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<OperationsActivityFeedDto>();
+        payload.Should().NotBeNull();
+        payload!.Items.Should().HaveCount(1);
+        payload.TotalCount.Should().Be(2);
+        payload.HasMore.Should().BeTrue();
+        payload.Items[0].Message.Should().Be("Sync failed due to token refresh error.");
+    }
+
+    [Fact]
+    public async Task Test_GetQuota_ReturnsMoveBudgetSnapshot()
+    {
+        // Arrange
+        using var factory = new PlaylistMinerWebAppFactory();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PlaylistMinerDbContext>();
+            var now = DateTime.UtcNow;
+
+            db.PipelineRuns.Add(new PipelineRun
+            {
+                RunId = "run-quota-1",
+                PipelineType = "remote-duplicate-cleanup",
+                Status = "completed",
+                Phase = "completed",
+                StartedAt = now.AddMinutes(-20),
+                UpdatedAt = now.AddMinutes(-10),
+                CompletedAt = now.AddMinutes(-10),
+                VideosProcessed = 12
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/api/operations/quota");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<OperationsQuotaDto>();
+        payload.Should().NotBeNull();
+        payload!.MovesUsedToday.Should().Be(12);
+        payload.MoveBudget.Should().BeGreaterThan(0);
+        payload.UnitsRemaining.Should().Be(payload.MoveBudget - 12);
+    }
 }

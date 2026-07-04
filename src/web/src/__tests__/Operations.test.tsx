@@ -4,6 +4,7 @@ import React from 'react';
 jest.mock('@/hooks/usePipeline');
 jest.mock('@/hooks/useDuplicates');
 jest.mock('@/hooks/useRemoteCleanup');
+jest.mock('@/hooks/useOperations');
 
 import {
   usePipelineStatus,
@@ -14,7 +15,8 @@ import {
 } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
-import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult } from '@/types';
+import { useOperationsActivity, useOperationsQuota } from '@/hooks/useOperations';
+import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult, OperationsActivityFeed, OperationsQuota } from '@/types';
 import OperationsPage from '../app/operations/page';
 
 const mockUsePipelineStatus = usePipelineStatus as jest.MockedFunction<typeof usePipelineStatus>;
@@ -25,6 +27,8 @@ const mockUseOperationsHealth = useOperationsHealth as jest.MockedFunction<typeo
 const mockUseDuplicateReview = useDuplicateReview as jest.MockedFunction<typeof useDuplicateReview>;
 const mockUseBuildRemoteCleanupPlan = useBuildRemoteCleanupPlan as jest.MockedFunction<typeof useBuildRemoteCleanupPlan>;
 const mockUseExecuteRemoteCleanup = useExecuteRemoteCleanup as jest.MockedFunction<typeof useExecuteRemoteCleanup>;
+const mockUseOperationsActivity = useOperationsActivity as jest.MockedFunction<typeof useOperationsActivity>;
+const mockUseOperationsQuota = useOperationsQuota as jest.MockedFunction<typeof useOperationsQuota>;
 
 const makeQueryResult = <T,>(data: T) => ({
   data,
@@ -48,6 +52,28 @@ const makeQueryResult = <T,>(data: T) => ({
   isStale: false,
 });
 
+const makeLoadingQueryResult = () => ({
+  data: undefined,
+  isLoading: true,
+  isError: false,
+  error: null,
+  status: 'pending' as const,
+  fetchStatus: 'fetching' as const,
+  isPending: true,
+  isSuccess: false,
+  isFetching: true,
+  isRefetching: false,
+  isLoadingError: false,
+  isRefetchError: false,
+  isPlaceholderData: false,
+  dataUpdatedAt: 0,
+  errorUpdatedAt: 0,
+  failureCount: 0,
+  failureReason: null,
+  refetch: jest.fn(),
+  isStale: true,
+});
+
 describe('OperationsPage', () => {
   const sampleHealth: DependencyHealth = {
     database: 'healthy',
@@ -68,6 +94,35 @@ describe('OperationsPage', () => {
     ollamaReachable: true,
     activeRunStalled: false,
     activeRunPhase: null,
+  };
+
+  const sampleOperationsQuota: OperationsQuota = {
+    movesUsedToday: 34,
+    moveBudget: 80,
+    resetsAt: new Date(Date.now() + 6 * 3600 * 1000).toISOString(),
+    unitsRemaining: 46,
+    isBlocked: false,
+    message: 'Move budget available.',
+  };
+
+  const sampleActivityFeed: OperationsActivityFeed = {
+    items: [
+      {
+        id: 21,
+        runId: 'remote-cleanup-123',
+        pipelineType: 'remote-duplicate-cleanup',
+        pipelineLabel: 'Remote Cleanup',
+        status: 'completed',
+        level: 'info',
+        phase: 'completed',
+        message: 'Removed duplicate video from playlist "Inbox".',
+        occurredAt: new Date().toISOString(),
+      },
+    ],
+    limit: 10,
+    offset: 0,
+    totalCount: 1,
+    hasMore: false,
   };
 
   const sampleActiveSyncRun: PipelineRun = {
@@ -187,6 +242,8 @@ describe('OperationsPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseOperationsHealth.mockReturnValue(makeQueryResult(sampleOperationsHealth));
+    mockUseOperationsQuota.mockReturnValue(makeQueryResult(sampleOperationsQuota));
+    mockUseOperationsActivity.mockReturnValue(makeQueryResult(sampleActivityFeed));
     mockUseDuplicateReview.mockReturnValue(makeQueryResult([]));
     mockUseBuildRemoteCleanupPlan.mockReturnValue({
       mutateAsync: jest.fn(),
@@ -211,6 +268,52 @@ describe('OperationsPage', () => {
     expect(screen.getByText('System Operations')).toBeInTheDocument();
     expect(screen.getByText('No background runs have executed yet.')).toBeInTheDocument();
     expect(screen.getByText('Database')).toBeInTheDocument();
+  });
+
+  it('renders quota meter and recent activity feed', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Organize Move Budget')).toBeInTheDocument();
+    expect(screen.getByText(/34 \/ 80/)).toBeInTheDocument();
+    expect(screen.getByText('Organize Activity')).toBeInTheDocument();
+    expect(screen.getByText('Removed duplicate video from playlist "Inbox".')).toBeInTheDocument();
+  });
+
+  it('renders neutral loading copy while move budget is still loading', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseOperationsQuota.mockReturnValue(makeLoadingQueryResult() as ReturnType<typeof useOperationsQuota>);
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Checking move budget…')).toBeInTheDocument();
+    expect(screen.queryByText('0 / 0')).not.toBeInTheDocument();
+  });
+
+  it('renders blocked quota state when the daily move budget is exhausted', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseOperationsQuota.mockReturnValue(makeQueryResult({
+      ...sampleOperationsQuota,
+      movesUsedToday: 80,
+      unitsRemaining: 0,
+      isBlocked: true,
+      message: 'Daily move budget exhausted.',
+    }));
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText(/80 \/ 80/)).toBeInTheDocument();
+    expect(screen.getByText(/blocked until reset/i)).toBeInTheDocument();
   });
 
   it('renders active sync run details and metrics', () => {

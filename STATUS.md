@@ -45,6 +45,12 @@ _Last updated: 2026-07-04_
   - `/organize` renders the preview UI with action/quota summary cards,
   - the planner currently uses the best existing tag suggestion/manual tag as the topic signal,
   - it previews `create_playlist`, `move`, and `review` actions without mutating YouTube.
+- Organize observability issue **#21** is now on `main` (July 4, 2026):
+  - `GET /api/operations/activity` returns newest-first organize-side pipeline activity with pagination,
+  - `GET /api/operations/quota` reports the daily move budget snapshot (`movesUsedToday`,
+    `moveBudget`, `resetsAt`, `unitsRemaining`),
+  - `/operations` now shows a neutral-loading move-budget meter and activity feed,
+  - the dashboard operations card now surfaces the same move-budget snapshot.
 
 ## Recently fixed (2026-06-29)
 - **Full sync stalled forever.** Root cause: monolithic all-or-nothing sync with per-item DB
@@ -81,6 +87,12 @@ _Last updated: 2026-07-04_
   - Screenshot artifacts captured:
     `docs/assets/organize-page-initial.png`
     `docs/assets/organize-page-empty-plan.png`
+- **Organize observability rollout.**
+  - Backend endpoints landed:
+    `GET /api/operations/activity`
+    `GET /api/operations/quota`
+  - `/operations` now includes the move-budget quota meter and activity feed used for issue `#21`.
+  - Remaining: deploy to NAS, capture screenshot artifact, and close the issue after live verify.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

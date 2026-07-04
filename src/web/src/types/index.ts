@@ -222,3 +222,32 @@ export interface OperationsHealth {
   activeRunStalled: boolean;
   activeRunPhase: string | null;
 }
+
+export interface OperationsActivityItem {
+  id: number;
+  runId: string;
+  pipelineType: string;
+  pipelineLabel: string;
+  status: string;
+  level: string;
+  phase: string;
+  message: string;
+  occurredAt: string;
+}
+
+export interface OperationsActivityFeed {
+  items: OperationsActivityItem[];
+  limit: number;
+  offset: number;
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export interface OperationsQuota {
+  movesUsedToday: number;
+  moveBudget: number;
+  resetsAt: string;
+  unitsRemaining: number;
+  isBlocked: boolean;
+  message: string;
+}
