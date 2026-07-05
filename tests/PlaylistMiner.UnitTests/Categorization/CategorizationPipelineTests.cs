@@ -54,32 +54,54 @@ public class CategorizationPipelineTests
         var ollamaMock = ollama ?? Mock.Of<IOllamaCategorizer>(m =>
             m.IsAvailableAsync(It.IsAny<CancellationToken>()) == Task.FromResult(false));
 
-        return new CategorizationPipeline(keywordMock, tfidfMock, ollamaMock, db, new PipelineRunTracker(db), NullLogger<CategorizationPipeline>.Instance);
+        return new CategorizationPipeline(
+            keywordMock,
+            tfidfMock,
+            ollamaMock,
+            db,
+            new PipelineRunTracker(db),
+            NullLogger<CategorizationPipeline>.Instance);
     }
 
     [Fact]
-    public async Task Test_Pipeline_RunsKeywordMatcherFirst()
+    public async Task Test_ClassifyAsync_UsesOllamaFirstWhenReachable()
     {
         // Arrange
         using var db = CreateDb();
+        db.Tags.Add(MakeTag(1, "React"));
         db.Videos.Add(MakeVideo(1));
         await db.SaveChangesAsync();
 
         var keywordMock = new Mock<IKeywordMatcher>();
         keywordMock.Setup(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
-                   .ReturnsAsync([]);
+                   .ReturnsAsync([new TagSuggestion(1, "React", 0.6f, TagSource.RuleBased)]);
 
-        var pipeline = CreatePipeline(db, keyword: keywordMock.Object);
+        var tfidfMock = new Mock<ITfIdfScorer>();
+        tfidfMock.Setup(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync([new TagSuggestion(1, "React", 0.55f, TagSource.TfIdf)]);
+
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        ollamaMock.Setup(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+                  .ReturnsAsync([new TagSuggestion(0, "React", 0.91f, TagSource.Ollama)]);
+
+        var pipeline = CreatePipeline(db, keyword: keywordMock.Object, tfidf: tfidfMock.Object, ollama: ollamaMock.Object);
 
         // Act
-        await pipeline.CategorizeAsync(1);
+        var result = await pipeline.ClassifyAsync(1);
 
         // Assert
-        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        result.Should().ContainSingle();
+        result[0].TagName.Should().Be("React");
+        result[0].Confidence.Should().BeApproximately(0.91f, 0.001f);
+        result[0].Source.Should().Be(TagSource.Ollama);
+        ollamaMock.Verify(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Never);
+        tfidfMock.Verify(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task Test_Pipeline_RunsTfIdfSecond()
+    public async Task Test_ClassifyAsync_FallsBackWhenOllamaUnavailable()
     {
         // Arrange
         using var db = CreateDb();
@@ -88,57 +110,61 @@ public class CategorizationPipelineTests
 
         var tfidfMock = new Mock<ITfIdfScorer>();
         tfidfMock.Setup(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
-                 .ReturnsAsync([]);
+                 .ReturnsAsync([new TagSuggestion(2, "TypeScript", 0.72f, TagSource.TfIdf)]);
 
         var keywordMock = new Mock<IKeywordMatcher>();
         keywordMock.Setup(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
                    .ReturnsAsync([new TagSuggestion(1, "React", 0.8f, TagSource.RuleBased)]);
 
-        var pipeline = CreatePipeline(db, keyword: keywordMock.Object, tfidf: tfidfMock.Object);
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var pipeline = CreatePipeline(db, keyword: keywordMock.Object, tfidf: tfidfMock.Object, ollama: ollamaMock.Object);
 
         // Act
-        await pipeline.CategorizeAsync(1);
+        var result = await pipeline.ClassifyAsync(1);
 
-        // Assert — TF-IDF runs even when keyword already has results
+        // Assert
+        result.Should().HaveCount(2);
+        result[0].TagName.Should().Be("React");
+        result[1].TagName.Should().Be("TypeScript");
+        ollamaMock.Verify(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
         tfidfMock.Verify(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Test_Pipeline_RunsOllamaOnlyIfNoSuggestions()
+    public async Task Test_ClassifyAsync_FallsBackWhenOllamaReturnsMalformedOrUnknownTags()
     {
-        // Arrange — scenario A: empty keyword+tfidf → Ollama called
-        using var dbA = CreateDb();
-        var tag = MakeTag(1, "React");
-        dbA.Videos.Add(MakeVideo(1));
-        dbA.Tags.Add(tag);
-        await dbA.SaveChangesAsync();
+        // Arrange
+        using var db = CreateDb();
+        db.Tags.AddRange(MakeTag(1, "React"), MakeTag(2, "TypeScript"));
+        db.Videos.Add(MakeVideo(1));
+        await db.SaveChangesAsync();
 
-        var ollamaMockA = new Mock<IOllamaCategorizer>();
-        ollamaMockA.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
-        ollamaMockA.Setup(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
-                   .ReturnsAsync([]);
+        var keywordMock = new Mock<IKeywordMatcher>();
+        keywordMock.Setup(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync([new TagSuggestion(1, "React", 0.64f, TagSource.RuleBased)]);
 
-        var pipelineA = CreatePipeline(dbA, ollama: ollamaMockA.Object);
-        await pipelineA.CategorizeAsync(1);
+        var tfidfMock = new Mock<ITfIdfScorer>();
+        tfidfMock.Setup(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
+                 .ReturnsAsync([new TagSuggestion(2, "TypeScript", 0.61f, TagSource.TfIdf)]);
 
-        ollamaMockA.Verify(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        ollamaMock.Setup(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+                  .ReturnsAsync([]);
 
-        // Arrange — scenario B: keyword returns suggestions → Ollama NOT called
-        using var dbB = CreateDb();
-        dbB.Videos.Add(MakeVideo(1));
-        await dbB.SaveChangesAsync();
+        var pipeline = CreatePipeline(db, keyword: keywordMock.Object, tfidf: tfidfMock.Object, ollama: ollamaMock.Object);
 
-        var ollamaMockB = new Mock<IOllamaCategorizer>();
-        ollamaMockB.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        // Act
+        var result = await pipeline.ClassifyAsync(1);
 
-        var keywordWithResults = new Mock<IKeywordMatcher>();
-        keywordWithResults.Setup(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
-                          .ReturnsAsync([new TagSuggestion(1, "React", 0.8f, TagSource.RuleBased)]);
-
-        var pipelineB = CreatePipeline(dbB, keyword: keywordWithResults.Object, ollama: ollamaMockB.Object);
-        await pipelineB.CategorizeAsync(1);
-
-        ollamaMockB.Verify(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        // Assert
+        result.Should().HaveCount(2);
+        result.Select(x => x.TagName).Should().Contain(["React", "TypeScript"]);
+        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
+        tfidfMock.Verify(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

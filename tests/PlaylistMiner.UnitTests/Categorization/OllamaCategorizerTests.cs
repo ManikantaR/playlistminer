@@ -98,6 +98,22 @@ public class OllamaCategorizerTests
     }
 
     [Fact]
+    public async Task Test_Categorize_FiltersSuggestionsOutsideVocabulary_AndOrdersByConfidence()
+    {
+        // Arrange
+        var innerJson = """[{"tag":"Vue","confidence":0.51},{"tag":"React","confidence":0.91},{"tag":"Unknown","confidence":0.99}]""";
+        var (categorizer, _) = CreateCategorizer(MakeOllamaResponse(innerJson));
+        var video = new VideoContext("Learn React", "React tutorial");
+
+        // Act
+        var result = await categorizer.CategorizeAsync(video, ["React", "Vue"]);
+
+        // Assert
+        result.Should().HaveCount(2);
+        result.Select(x => x.TagName).Should().Equal("React", "Vue");
+    }
+
+    [Fact]
     public async Task Test_Categorize_OllamaUnavailable_ReturnsEmpty()
     {
         // Arrange

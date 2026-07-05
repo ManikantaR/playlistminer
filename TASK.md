@@ -25,8 +25,9 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 
 - [x] #9 **(prereq)** Set-as-Incoming UI + designate inbox landed on `main`; OAuth/first-sync
   e2e verification path is now documented in `docs/OPS-RUNBOOK.md`
-- [ ] #6 **(1st)** Dedup DETECT pass + review list — zero quota, immediate payoff
-- [ ] #2 Ollama-primary classifier (reachability-gated; keyword/TF-IDF fallback) → topic+confidence
+- [x] #6 **(superseded / closed)** Dedup detect path is covered by the local single-playlist
+  membership constraint plus remote cleanup planner/executor (`#24`) for YouTube-side cleanup
+- [x] #2 Ollama-primary classifier (reachability-gated; keyword/TF-IDF fallback) → topic+confidence
 - [ ] #3 Topic→managed-playlist materialization (auto-create)
 - [x] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI preview
 - [ ] #5 Executor — wire `MoveVideoAsync`, ~20/batch, move-budget, idempotent, newest-first, undo

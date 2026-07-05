@@ -4,7 +4,7 @@
 > changes (deploy, sync run, new bug). Pairs with [TASK.md](TASK.md) (the backlog).
 > Goal: any session — human or agent — can resume cold from this file.
 
-_Last updated: 2026-07-04_
+_Last updated: 2026-07-05_
 
 ## Deployment
 | Component | Where | State |
@@ -51,6 +51,19 @@ _Last updated: 2026-07-04_
     `moveBudget`, `resetsAt`, `unitsRemaining`),
   - `/operations` now shows a neutral-loading move-budget meter and activity feed,
   - the dashboard operations card now surfaces the same move-budget snapshot.
+- Organize classifier issue **#2** is now on `main` (July 5, 2026):
+  - `CategorizationPipeline` now exposes `ClassifyAsync` and uses **Ollama first** when reachable,
+  - if Ollama is unavailable or returns unusable output, categorization falls back to
+    keyword/TF-IDF without failing the run,
+  - Ollama output is constrained to the known tag vocabulary and malformed output is tolerated,
+  - `Categorization:AutoFileConfidence` is now the shared confidence threshold used by the
+    planner for move vs review decisions.
+- Organize dedup detection issue **#6** is superseded by shipped work already on `main`:
+  - local state now enforces **one playlist per video** via the unique
+    `playlist_videos.video_id` index and the cleanup migration,
+  - remote YouTube-side duplicate detection + controlled cleanup shipped under issue `#24`,
+  - the old `#6` assumption that cross-playlist membership is intentional no longer matches the
+    current product direction.
 
 ## Recently fixed (2026-06-29)
 - **Full sync stalled forever.** Root cause: monolithic all-or-nothing sync with per-item DB
@@ -100,6 +113,23 @@ _Last updated: 2026-07-04_
       `a8dfb170-3030-4502-96ea-a734068bb078`
   - Screenshot artifact captured:
     `docs/assets/operations-observability-live.png`
+- **Dedup roadmap reconciliation.**
+  - Issue `#6` was audited against the current schema and shipped behavior on July 4, 2026.
+  - Result: no separate new local dedup detect implementation is needed because:
+    - migration `20260629153000_EnforceSinglePlaylistMembership` already removes local
+      cross-playlist duplicates and enforces uniqueness going forward,
+    - issue `#24` already covers the remaining remote YouTube duplicate detection/execution path.
+  - Remaining roadmap work moves to the next real organize-engine blocker: issue `#2`
+    (Ollama-primary classifier).
+- **Ollama-primary classifier rollout.**
+  - Local verification:
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~Categorization|FullyQualifiedName~OrganizePlannerServiceTests"` → **46 passed**
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter FullyQualifiedName~CategorizationPipelineTests` → **7 passed**
+  - Behavior change:
+    - `ClassifyAsync` now prefers Ollama over local heuristics,
+    - fallback remains non-blocking when the Mac-hosted Ollama endpoint is asleep/unreachable,
+    - planner threshold is configurable via `Categorization:AutoFileConfidence` (default `0.65`).
+  - Remaining: commit, deploy to NAS, capture screenshot artifact, and close issue `#2`.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
+using PlaylistMiner.Core.Categorization;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
@@ -9,12 +11,12 @@ namespace PlaylistMiner.Infrastructure.Services;
 
 public sealed class OrganizePlannerService(
     PlaylistMinerDbContext db,
+    IOptions<CategorizationOptions> options,
     ILogger<OrganizePlannerService> logger) : IOrganizePlannerService
 {
-    private const float ConfidenceThreshold = 0.75f;
-
     public async Task<OrganizePlanDto> BuildPlanAsync(CancellationToken ct = default)
     {
+        var confidenceThreshold = options.Value.AutoFileConfidence;
         var inbox = await db.Playlists
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.IsInbox, ct);
@@ -63,7 +65,7 @@ public sealed class OrganizePlannerService(
                 .ThenBy(tag => tag.Topic, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
 
-            if (bestTopic is null || bestTopic.Confidence < ConfidenceThreshold)
+            if (bestTopic is null || bestTopic.Confidence < confidenceThreshold)
             {
                 items.Add(new OrganizePlanItemDto(
                     "review",

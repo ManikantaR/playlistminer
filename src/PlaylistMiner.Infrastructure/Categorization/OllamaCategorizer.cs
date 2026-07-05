@@ -49,7 +49,14 @@ public class OllamaCategorizer(HttpClient httpClient, IOptions<CategorizationOpt
                 return [];
 
             var innerJson = responseElement.GetString() ?? "";
-            return ParseSuggestions(innerJson);
+            var suggestions = ParseSuggestions(innerJson);
+            var allowed = availableTags.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return suggestions
+                .Where(s => allowed.Contains(s.TagName))
+                .OrderByDescending(s => s.Confidence)
+                .ThenBy(s => s.TagName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
         catch
         {
@@ -85,11 +92,31 @@ public class OllamaCategorizer(HttpClient httpClient, IOptions<CategorizationOpt
             var suggestions = new List<TagSuggestion>();
             foreach (var item in doc.RootElement.EnumerateArray())
             {
-                if (!item.TryGetProperty("tag", out var tagElement)) continue;
-                if (!item.TryGetProperty("confidence", out var confElement)) continue;
+                JsonElement tagElement;
+                if (!item.TryGetProperty("tag", out tagElement) && !item.TryGetProperty("topic", out tagElement))
+                    continue;
+                if (!item.TryGetProperty("confidence", out var confElement))
+                    continue;
 
                 var tagName = tagElement.GetString() ?? "";
-                var confidence = confElement.GetSingle();
+                if (string.IsNullOrWhiteSpace(tagName))
+                    continue;
+
+                float confidence;
+                if (confElement.ValueKind == JsonValueKind.Number)
+                {
+                    confidence = confElement.GetSingle();
+                }
+                else if (confElement.ValueKind == JsonValueKind.String
+                         && float.TryParse(confElement.GetString(), out var parsedConfidence))
+                {
+                    confidence = parsedConfidence;
+                }
+                else
+                {
+                    continue;
+                }
+
                 suggestions.Add(new TagSuggestion(0, tagName, confidence, TagSource.Ollama));
             }
             return suggestions;

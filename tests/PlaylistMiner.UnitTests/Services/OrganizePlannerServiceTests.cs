@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
+using PlaylistMiner.Core.Categorization;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
@@ -19,6 +21,14 @@ public class OrganizePlannerServiceTests
             .Options;
         return new PlaylistMinerDbContext(opts);
     }
+
+    private static OrganizePlannerService CreateService(
+        PlaylistMinerDbContext db,
+        CategorizationOptions? options = null)
+        => new(
+            db,
+            Options.Create(options ?? new CategorizationOptions()),
+            NullLogger<OrganizePlannerService>.Instance);
 
     [Fact]
     public async Task Test_BuildPlan_WhenInboxVideoMatchesExistingManagedPlaylist_PlansMove()
@@ -92,7 +102,7 @@ public class OrganizePlannerServiceTests
         });
         await db.SaveChangesAsync();
 
-        IOrganizePlannerService service = new OrganizePlannerService(db, NullLogger<OrganizePlannerService>.Instance);
+        IOrganizePlannerService service = CreateService(db);
 
         var plan = await service.BuildPlanAsync();
 
@@ -166,7 +176,7 @@ public class OrganizePlannerServiceTests
         });
         await db.SaveChangesAsync();
 
-        IOrganizePlannerService service = new OrganizePlannerService(db, NullLogger<OrganizePlannerService>.Instance);
+        IOrganizePlannerService service = CreateService(db);
 
         var plan = await service.BuildPlanAsync();
 
@@ -240,7 +250,7 @@ public class OrganizePlannerServiceTests
         });
         await db.SaveChangesAsync();
 
-        IOrganizePlannerService service = new OrganizePlannerService(db, NullLogger<OrganizePlannerService>.Instance);
+        IOrganizePlannerService service = CreateService(db);
 
         var plan = await service.BuildPlanAsync();
 
@@ -249,5 +259,86 @@ public class OrganizePlannerServiceTests
         plan.Items[0].EstimatedQuotaCost.Should().Be(0);
         plan.Items[0].TargetPlaylistName.Should().BeNull();
         plan.Items[0].Reason.Should().Contain("confidence");
+    }
+
+    [Fact]
+    public async Task Test_BuildPlan_UsesSharedAutoFileConfidenceThresholdBoundary()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLinbox",
+            Name = "Incoming",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var managed = new Playlist
+        {
+            Id = 2,
+            YouTubeId = "PLmanaged",
+            Name = "AI Agents",
+            IsManaged = true,
+            Topic = "AI Agents",
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var tag = new Tag
+        {
+            Id = 10,
+            Name = "AI Agents",
+            Slug = "ai-agents",
+            CreatedAt = now
+        };
+        var video = new Video
+        {
+            Id = 100,
+            YouTubeId = "vid001",
+            Title = "Agentic Systems",
+            Description = "desc",
+            ChannelName = "Channel",
+            ChannelId = "UC1",
+            ThumbnailUrl = "https://example.com/thumb.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.AddRange(inbox, managed);
+        db.Tags.Add(tag);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = inbox.Id,
+            VideoId = video.Id,
+            Position = 0,
+            AddedAt = now,
+            PlaylistItemId = "pli-inbox"
+        });
+        db.VideoTags.Add(new VideoTag
+        {
+            VideoId = video.Id,
+            TagId = tag.Id,
+            Source = TagSource.Ollama,
+            Confidence = 0.70f,
+            CreatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db, new CategorizationOptions { AutoFileConfidence = 0.70f });
+
+        var plan = await service.BuildPlanAsync();
+
+        plan.Items.Should().ContainSingle();
+        plan.Items[0].Action.Should().Be("move");
+        plan.Items[0].Confidence.Should().BeApproximately(0.70f, 0.001f);
     }
 }

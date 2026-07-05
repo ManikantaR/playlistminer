@@ -15,6 +15,21 @@ public class CategorizationPipeline(
     IPipelineRunTracker tracker,
     ILogger<CategorizationPipeline> logger) : ICategorizationPipeline
 {
+    public async Task<List<TagSuggestion>> ClassifyAsync(int videoId, CancellationToken ct = default)
+    {
+        var video = await db.Videos
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.Id == videoId, ct);
+
+        if (video is null)
+        {
+            logger.LogWarning("Video {VideoId} not found for classification", videoId);
+            return [];
+        }
+
+        return await ClassifyVideoAsync(video, null, ct);
+    }
+
     public async Task<List<TagSuggestion>> CategorizeAsync(int videoId, string? runId = null, CancellationToken ct = default)
     {
         var video = await db.Videos
@@ -34,56 +49,7 @@ public class CategorizationPipeline(
             return [];
         }
 
-        if (runId is not null)
-        {
-            await tracker.UpdateRunAsync(runId, _ => {}, phase: "rule_matching", message: $"Running keyword matching and TF-IDF scoring for video {videoId}...", ct: ct);
-        }
-
-        var context = new VideoContext(video.Title, video.Description);
-
-        // Run keyword matcher and TF-IDF in parallel for efficiency
-        var keywordTask = keywordMatcher.MatchAsync(context, ct);
-        var tfidfTask = tfIdfScorer.ScoreAsync(context, ct);
-
-        await Task.WhenAll(keywordTask, tfidfTask);
-
-        var keywordResults = keywordTask.Result;
-        var tfidfResults = tfidfTask.Result;
-
-        // Merge: group by TagId, keep highest confidence
-        var merged = keywordResults
-            .Concat(tfidfResults)
-            .GroupBy(s => s.TagId)
-            .Select(g => g.MaxBy(s => s.Confidence)!)
-            .ToList();
-
-        // If merged is empty, try Ollama as fallback
-        if (merged.Count == 0)
-        {
-            if (await ollamaCategorizer.IsAvailableAsync(ct))
-            {
-                if (runId is not null)
-                {
-                    await tracker.UpdateRunAsync(runId, _ => {}, phase: "ollama_classification", message: $"Running Ollama classification for video {videoId}...", ct: ct);
-                }
-
-                var allTags = await db.Tags.ToListAsync(ct);
-                var availableTagNames = allTags.Select(t => t.Name);
-                var ollamaSuggestions = await ollamaCategorizer.CategorizeAsync(context, availableTagNames, ct);
-
-                // Resolve tag names to IDs
-                var tagByName = allTags.ToDictionary(
-                    t => t.Name,
-                    t => t,
-                    StringComparer.OrdinalIgnoreCase);
-
-                foreach (var suggestion in ollamaSuggestions)
-                {
-                    if (tagByName.TryGetValue(suggestion.TagName, out var tag))
-                        merged.Add(suggestion with { TagId = tag.Id });
-                }
-            }
-        }
+        var merged = await ClassifyVideoAsync(video, runId, ct);
 
         if (merged.Count == 0)
         {
@@ -184,5 +150,58 @@ public class CategorizationPipeline(
             await tracker.FailRunAsync(runId, ex.Message, null, ct);
             throw;
         }
+    }
+
+    private async Task<List<TagSuggestion>> ClassifyVideoAsync(Video video, string? runId, CancellationToken ct)
+    {
+        var context = new VideoContext(video.Title, video.Description ?? string.Empty);
+        var allTags = await db.Tags
+            .AsNoTracking()
+            .ToListAsync(ct);
+        var tagByName = allTags.ToDictionary(t => t.Name, t => t, StringComparer.OrdinalIgnoreCase);
+
+        if (await ollamaCategorizer.IsAvailableAsync(ct))
+        {
+            if (runId is not null)
+            {
+                await tracker.UpdateRunAsync(runId, _ => { }, phase: "ollama_classification", message: $"Running Ollama classification for video {video.Id}...", ct: ct);
+            }
+
+            var ollamaSuggestions = await ollamaCategorizer.CategorizeAsync(context, allTags.Select(t => t.Name), ct);
+            var resolved = ollamaSuggestions
+                .Where(s => tagByName.TryGetValue(s.TagName, out _))
+                .Select(s => s with { TagId = tagByName[s.TagName].Id })
+                .OrderByDescending(s => s.Confidence)
+                .ThenBy(s => s.TagName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (resolved.Count > 0)
+            {
+                return resolved;
+            }
+
+            logger.LogWarning("Ollama returned no usable classifications for video {VideoId}; falling back to keyword/TF-IDF.", video.Id);
+        }
+        else
+        {
+            logger.LogWarning("Ollama unavailable for video {VideoId}; falling back to keyword/TF-IDF.", video.Id);
+        }
+
+        if (runId is not null)
+        {
+            await tracker.UpdateRunAsync(runId, _ => { }, phase: "rule_matching", message: $"Running keyword matching and TF-IDF scoring for video {video.Id}...", ct: ct);
+        }
+
+        var keywordTask = keywordMatcher.MatchAsync(context, ct);
+        var tfidfTask = tfIdfScorer.ScoreAsync(context, ct);
+        await Task.WhenAll(keywordTask, tfidfTask);
+
+        return keywordTask.Result
+            .Concat(tfidfTask.Result)
+            .GroupBy(s => s.TagId)
+            .Select(g => g.MaxBy(s => s.Confidence)!)
+            .OrderByDescending(s => s.Confidence)
+            .ThenBy(s => s.TagName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }
