@@ -173,7 +173,9 @@ _Last updated: 2026-07-05_
   - Behavior change:
     - `/organize` now exposes an operator-facing **Execute Organize Batch** action plus last-run summary,
     - organize execution rebuilds the current plan server-side, executes only move items, creates managed playlists on demand, and checkpoints counters into `pipeline_runs`,
-    - when the daily move budget is exhausted or YouTube quota fails mid-run, the executor defers the remaining moves instead of continuing blindly.
+    - when the daily move budget is exhausted or YouTube quota fails mid-run, the executor defers the remaining moves instead of continuing blindly,
+    - executor hardening now revalidates local playlist placement before each move and skips stale/already-applied work idempotently,
+    - duplicate move entries for the same video inside one execution batch now run only once and are counted as skipped thereafter.
   - NAS deploy verification succeeded on July 5, 2026.
   - Live checks:
     - `GET /api/operations/health` returned healthy dependencies with
@@ -182,6 +184,10 @@ _Last updated: 2026-07-05_
     - live `POST /api/organize/execute` was intentionally **not** run in this session because it would mutate real YouTube playlists and spend quota.
   - Screenshot artifact captured:
     `docs/assets/organize-executor-live.png`
+  - Follow-up hardening verification on July 5, 2026:
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter FullyQualifiedName~OrganizeExecutorServiceTests` → **5 passed**
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~PlaylistOrganizerTests"` → **17 passed**
+    - NAS `pm-api` and `pm-worker` were redeployed with the hardened executor logic.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

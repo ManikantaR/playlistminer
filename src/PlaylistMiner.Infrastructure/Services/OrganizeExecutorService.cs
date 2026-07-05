@@ -52,6 +52,7 @@ public sealed class OrganizeExecutorService(
         var errors = new List<string>();
         var executed = 0;
         var skipped = 0;
+        var processedVideoIds = new HashSet<int>();
 
         try
         {
@@ -84,10 +85,38 @@ public sealed class OrganizeExecutorService(
 
                 try
                 {
+                    var videoId = item.VideoId ?? throw new InvalidOperationException("Move item is missing a video id.");
                     var targetPlaylistId = item.TargetPlaylistId
                         ?? (await playlistOrganizer.EnsureManagedPlaylistAsync(item.Topic ?? item.TargetPlaylistName ?? throw new InvalidOperationException("Move item is missing a topic."), ct)).Id;
 
-                    await playlistOrganizer.MoveVideoAsync(item.VideoId ?? throw new InvalidOperationException("Move item is missing a video id."), inbox.Id, targetPlaylistId, ct);
+                    if (!processedVideoIds.Add(videoId))
+                    {
+                        skipped = await SkipMoveAsync(
+                            runId,
+                            skipped,
+                            item,
+                            "Skipping duplicate organize move for the same video within this batch.",
+                            deferredCount,
+                            executed,
+                            ct);
+                        continue;
+                    }
+
+                    var validation = await ValidateMoveAsync(videoId, inbox.Id, targetPlaylistId, ct);
+                    if (!validation.CanExecute)
+                    {
+                        skipped = await SkipMoveAsync(
+                            runId,
+                            skipped,
+                            item,
+                            validation.Message,
+                            deferredCount,
+                            executed,
+                            ct);
+                        continue;
+                    }
+
+                    await playlistOrganizer.MoveVideoAsync(videoId, inbox.Id, targetPlaylistId, ct);
                     executed++;
 
                     await tracker.UpdateRunAsync(
@@ -155,5 +184,60 @@ public sealed class OrganizeExecutorService(
             }, ct);
             throw;
         }
+    }
+
+    private async Task<(bool CanExecute, string Message)> ValidateMoveAsync(
+        int videoId,
+        int inboxPlaylistId,
+        int targetPlaylistId,
+        CancellationToken ct)
+    {
+        var currentPlacement = await db.PlaylistVideos
+            .AsNoTracking()
+            .Where(pv => pv.VideoId == videoId)
+            .Select(pv => new { pv.PlaylistId, PlaylistName = pv.Playlist.Name })
+            .FirstOrDefaultAsync(ct);
+
+        if (currentPlacement is null)
+        {
+            return (false, "Video no longer has a local playlist placement.");
+        }
+
+        if (currentPlacement.PlaylistId == targetPlaylistId)
+        {
+            return (false, "Video is already filed in the target playlist.");
+        }
+
+        if (currentPlacement.PlaylistId != inboxPlaylistId)
+        {
+            return (false, $"Video no longer belongs to the inbox playlist; current playlist is \"{currentPlacement.PlaylistName}\".");
+        }
+
+        return (true, string.Empty);
+    }
+
+    private async Task<int> SkipMoveAsync(
+        string runId,
+        int skipped,
+        OrganizePlanItemDto item,
+        string reason,
+        int deferredCount,
+        int executed,
+        CancellationToken ct)
+    {
+        skipped++;
+
+        await tracker.UpdateRunAsync(
+            runId,
+            run =>
+            {
+                run.VideosProcessed = executed;
+                run.VideosSkipped = skipped;
+                run.VideosDeferred = deferredCount;
+            },
+            message: $"Skipped \"{item.Title}\": {reason}",
+            ct: ct);
+
+        return skipped;
     }
 }
