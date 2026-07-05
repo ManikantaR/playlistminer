@@ -112,6 +112,16 @@ export interface OrganizePlan {
   items: OrganizePlanItem[];
 }
 
+export interface OrganizeExecutionResult {
+  videosExamined: number;
+  movesPlanned: number;
+  movesExecuted: number;
+  movesSkipped: number;
+  deferredCount: number;
+  errors: string[];
+  runId: string | null;
+}
+
 export interface PagedResult<T> {
   items: T[];
   totalCount: number;

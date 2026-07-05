@@ -4,11 +4,12 @@ import React from 'react';
 
 jest.mock('@/hooks/useOrganize');
 
-import { useBuildOrganizePlan } from '@/hooks/useOrganize';
+import { useBuildOrganizePlan, useExecuteOrganize } from '@/hooks/useOrganize';
 import OrganizePage from '../app/organize/page';
-import type { OrganizePlan } from '@/types';
+import type { OrganizeExecutionResult, OrganizePlan } from '@/types';
 
 const mockUseBuildOrganizePlan = useBuildOrganizePlan as jest.MockedFunction<typeof useBuildOrganizePlan>;
+const mockUseExecuteOrganize = useExecuteOrganize as jest.MockedFunction<typeof useExecuteOrganize>;
 
 const renderPage = () => {
   const queryClient = new QueryClient();
@@ -23,6 +24,11 @@ const renderPage = () => {
 describe('OrganizePage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseExecuteOrganize.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteOrganize>);
   });
 
   it('renders organize plan results after building the plan', () => {
@@ -89,6 +95,35 @@ describe('OrganizePage', () => {
     expect(screen.getByText('Needs review')).toBeInTheDocument();
   });
 
+  it('renders organize execution summary after executing a batch', () => {
+    const sampleExecution: OrganizeExecutionResult = {
+      videosExamined: 3,
+      movesPlanned: 2,
+      movesExecuted: 2,
+      movesSkipped: 0,
+      deferredCount: 1,
+      errors: [],
+      runId: 'run-123',
+    };
+
+    mockUseBuildOrganizePlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildOrganizePlan>);
+    mockUseExecuteOrganize.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleExecution,
+      isPending: false,
+    } as ReturnType<typeof useExecuteOrganize>);
+
+    renderPage();
+
+    expect(screen.getByText('Last execution')).toBeInTheDocument();
+    expect(screen.getByText('Executed')).toBeInTheDocument();
+    expect(screen.getByText(/Run ID/)).toBeInTheDocument();
+  });
+
   it('triggers plan building from the page action', () => {
     const mutateAsync = jest.fn();
 
@@ -101,6 +136,26 @@ describe('OrganizePage', () => {
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: 'Build Organize Plan' }));
+    expect(mutateAsync).toHaveBeenCalled();
+  });
+
+  it('triggers organize execution from the page action', () => {
+    const mutateAsync = jest.fn();
+
+    mockUseBuildOrganizePlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildOrganizePlan>);
+    mockUseExecuteOrganize.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteOrganize>);
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute Organize Batch' }));
     expect(mutateAsync).toHaveBeenCalled();
   });
 });

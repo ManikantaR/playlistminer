@@ -2,7 +2,7 @@
 
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { useBuildOrganizePlan } from '@/hooks/useOrganize';
+import { useBuildOrganizePlan, useExecuteOrganize } from '@/hooks/useOrganize';
 
 function formatActionLabel(action: string, targetPlaylistName: string | null) {
   switch (action) {
@@ -19,9 +19,14 @@ function formatActionLabel(action: string, targetPlaylistName: string | null) {
 
 export default function OrganizePage() {
   const organizePlan = useBuildOrganizePlan();
+  const organizeExecution = useExecuteOrganize();
 
   const buildPlan = async () => {
     await organizePlan.mutateAsync();
+  };
+
+  const executeBatch = async () => {
+    await organizeExecution.mutateAsync();
   };
 
   return (
@@ -37,6 +42,56 @@ export default function OrganizePage() {
           {organizePlan.isPending ? 'Planning...' : 'Build Organize Plan'}
         </Button>
       </div>
+
+      <Card>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Execute Organize Batch</p>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Runs the next small organize batch against the current plan and records an operations run.
+            </p>
+          </div>
+          <Button onClick={executeBatch} disabled={organizeExecution.isPending}>
+            {organizeExecution.isPending ? 'Executing...' : 'Execute Organize Batch'}
+          </Button>
+        </div>
+      </Card>
+
+      {organizeExecution.data && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Last execution</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Run ID {organizeExecution.data.runId ?? 'n/a'}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Examined</p>
+                <p className="mt-1 text-2xl font-bold">{organizeExecution.data.videosExamined}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Planned</p>
+                <p className="mt-1 text-2xl font-bold">{organizeExecution.data.movesPlanned}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Executed</p>
+                <p className="mt-1 text-2xl font-bold">{organizeExecution.data.movesExecuted}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Deferred</p>
+                <p className="mt-1 text-2xl font-bold">{organizeExecution.data.deferredCount}</p>
+              </div>
+            </div>
+            {organizeExecution.data.errors.length > 0 && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300">
+                {organizeExecution.data.errors.join(' ')}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {!organizePlan.data ? (
         <Card>

@@ -30,7 +30,7 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 - [x] #2 Ollama-primary classifier (reachability-gated; keyword/TF-IDF fallback) → topic+confidence
 - [x] #3 Topic→managed-playlist materialization (auto-create)
 - [x] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI preview
-- [ ] #5 Executor — wire `MoveVideoAsync`, ~20/batch, move-budget, idempotent, newest-first, undo
+- [~] #5 Executor — manual/API/worker execution slice landed; remaining hardening on multi-topic + stronger idempotency
 - [x] #21 Organize observability — activity feed + move-budget quota meter on `/operations`
 - [ ] #22 Telegram per-run organize digest (primary "what the agent did" channel)
 - [x] #24 Remote YouTube duplicate cleanup planner + executor — merged to `main` via PR #25;

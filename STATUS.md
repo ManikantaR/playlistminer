@@ -63,6 +63,12 @@ _Last updated: 2026-07-05_
   - topic matching is normalized (trimmed, case-insensitive) and ignores unmanaged playlists,
   - managed playlist creation is quota-aware and single-flight idempotent,
   - the service persists newly created playlists with `IsManaged=true` and `Topic=<topic>`.
+- Organize executor issue **#5** is partially landed on `main` (July 5, 2026):
+  - `POST /api/organize/execute` now executes the next organize batch from the current planner output,
+  - execution is capped by `Organize:ExecutionBatchSize` (default `20`) and the shared daily move budget,
+  - successful moves still write 7-day undo logs through `PlaylistOrganizer.MoveVideoAsync`,
+  - YouTube playlist inserts now request `position: 0` for newest-first filing,
+  - the worker now has a 15-minute `OrganizeExecutionJob` that only runs when Ollama is reachable.
 - Organize dedup detection issue **#6** is superseded by shipped work already on `main`:
   - local state now enforces **one playlist per video** via the unique
     `playlist_videos.video_id` index and the cleanup migration,
@@ -158,6 +164,24 @@ _Last updated: 2026-07-05_
     - `POST /api/organize/plan` returned `0` videos / `0` actions on the live system.
   - Screenshot artifact captured:
     `docs/assets/managed-playlist-materialization-live.png`
+- **Organize executor rollout.**
+  - Local verification:
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests|FullyQualifiedName~OrganizePlannerServiceTests"` → **25 passed**
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~InboxProcessingJobTests|FullyQualifiedName~OrganizeExecutorServiceTests"` → **8 passed**
+    - `dotnet test tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj --filter "FullyQualifiedName~OrganizeControllerTests|FullyQualifiedName~OrganizeExecuteControllerTests"` → **2 passed**
+    - `npm test -- --runInBand OrganizePage.test.tsx` → **4 passed**
+  - Behavior change:
+    - `/organize` now exposes an operator-facing **Execute Organize Batch** action plus last-run summary,
+    - organize execution rebuilds the current plan server-side, executes only move items, creates managed playlists on demand, and checkpoints counters into `pipeline_runs`,
+    - when the daily move budget is exhausted or YouTube quota fails mid-run, the executor defers the remaining moves instead of continuing blindly.
+  - NAS deploy verification succeeded on July 5, 2026.
+  - Live checks:
+    - `GET /api/operations/health` returned healthy dependencies with
+      `workerHealthy: true`, `quotaExhausted: false`, and `ollamaReachable: false`,
+    - `POST /api/organize/plan` returned `0` videos / `0` actions on the live system,
+    - live `POST /api/organize/execute` was intentionally **not** run in this session because it would mutate real YouTube playlists and spend quota.
+  - Screenshot artifact captured:
+    `docs/assets/organize-executor-live.png`
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
@@ -176,9 +200,9 @@ _Last updated: 2026-07-05_
 - ~~`UndoRepository.GetPendingAsync` LINQ error~~ — fixed (OrderBy moved before projection);
   `GET /api/undo` returns 200 live.
 - `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
-- Organize engine still ~80% unbuilt (see [TASK.md](TASK.md), issues #2–#9): categorization
-  only *suggests* tags; `PlaylistOrganizer.MoveVideoAsync` is unwired; `ConsolidateAsync` is a
-  stub; no dedup; no watch-history import.
+- Remaining organize-engine gaps are narrower now: executor hardening still needs explicit
+  multi-topic filing and stronger idempotency semantics; `ConsolidateAsync` is still a stub;
+  watch-history import is still unbuilt.
 
 ## How to check health fast
 ```

@@ -94,7 +94,7 @@ public class PlaylistOrganizer(
         logger.LogInformation("Moving video {VideoId} from playlist {Source} to {Target}.",
             videoId, sourcePlaylistId, targetPlaylistId);
 
-        await youTubeApiClient.AddVideoToPlaylistAsync(targetPlaylist.YouTubeId, video.YouTubeId, ct);
+        await youTubeApiClient.AddVideoToPlaylistAsync(targetPlaylist.YouTubeId, video.YouTubeId, 0, ct);
         await youTubeApiClient.RemoveVideoFromPlaylistAsync(sourcePlaylist.YouTubeId, playlistItemId, ct);
 
         if (sourcePlaylistVideo is not null)
@@ -152,7 +152,7 @@ public class PlaylistOrganizer(
         logger.LogInformation("Undoing move of video {VideoId} from playlist {Target} back to {Source}.",
             video.Id, targetPlaylist.Id, sourcePlaylist.Id);
 
-        await youTubeApiClient.AddVideoToPlaylistAsync(sourcePlaylist.YouTubeId, video.YouTubeId, ct);
+        await youTubeApiClient.AddVideoToPlaylistAsync(sourcePlaylist.YouTubeId, video.YouTubeId, 0, ct);
         await youTubeApiClient.RemoveVideoFromPlaylistAsync(
             targetPlaylist.YouTubeId,
             undoLog.PlaylistItemId ?? video.YouTubeId,

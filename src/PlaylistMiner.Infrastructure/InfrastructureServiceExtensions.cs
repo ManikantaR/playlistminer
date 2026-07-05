@@ -37,6 +37,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IVideoService, VideoService>();
         services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
         services.AddScoped<IOrganizePlannerService, OrganizePlannerService>();
+        services.AddScoped<IOrganizeExecutorService, OrganizeExecutorService>();
         services.AddScoped<IOperationsObservabilityService, OperationsObservabilityService>();
         services.AddScoped<IRemoteDuplicateCleanupService, RemoteDuplicateCleanupService>();
         services.AddScoped<IImportService, ImportService>();
@@ -114,6 +115,10 @@ public static class InfrastructureServiceExtensions
         IConfiguration configuration)
     {
         services.AddCategorizationEngine(configuration);
+        services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
+        services.AddScoped<IOrganizePlannerService, OrganizePlannerService>();
+        services.AddScoped<IOrganizeExecutorService, OrganizeExecutorService>();
+        services.AddScoped<IOperationsObservabilityService, OperationsObservabilityService>();
         services.AddScoped<ISyncTrigger, SyncTriggerService>();
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IProcessRunner, ProcessRunner>();

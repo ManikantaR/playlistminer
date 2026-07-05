@@ -143,7 +143,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
         return results;
     }
 
-    public async Task AddVideoToPlaylistAsync(string playlistId, string videoId, CancellationToken ct = default)
+    public async Task AddVideoToPlaylistAsync(string playlistId, string videoId, int? position = null, CancellationToken ct = default)
     {
         var token = await _tokenProvider.GetAccessTokenAsync(ct);
         var body = JsonSerializer.Serialize(new
@@ -151,6 +151,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
             snippet = new
             {
                 playlistId,
+                position,
                 resourceId = new { kind = "youtube#video", videoId }
             }
         });

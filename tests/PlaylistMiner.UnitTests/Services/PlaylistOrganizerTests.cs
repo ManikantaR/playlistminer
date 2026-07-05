@@ -96,7 +96,7 @@ public class PlaylistOrganizerTests
         await organizer.MoveVideoAsync(1, 1, 2);
 
         // Assert
-        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", It.IsAny<CancellationToken>()), Times.Once);
+        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()), Times.Once);
         ytMock.Verify(y => y.RemoveVideoFromPlaylistAsync("PLsource", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
 
         var sourcePv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 1 && pv.VideoId == 1);
@@ -166,7 +166,7 @@ public class PlaylistOrganizerTests
         await organizer.UndoMoveAsync(undoLog.Id);
 
         // Assert
-        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLsource", "vid001", It.IsAny<CancellationToken>()), Times.Once);
+        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLsource", "vid001", 0, It.IsAny<CancellationToken>()), Times.Once);
         ytMock.Verify(y => y.RemoveVideoFromPlaylistAsync("PLtarget", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
 
         var log = await db.UndoLogs.FindAsync(undoLog.Id);
