@@ -58,6 +58,11 @@ _Last updated: 2026-07-05_
   - Ollama output is constrained to the known tag vocabulary and malformed output is tolerated,
   - `Categorization:AutoFileConfidence` is now the shared confidence threshold used by the
     planner for move vs review decisions.
+- Managed-playlist materialization issue **#3** is now on `main` (July 5, 2026):
+  - `IPlaylistOrganizer` / `PlaylistOrganizer` now expose `EnsureManagedPlaylistAsync(topic)`,
+  - topic matching is normalized (trimmed, case-insensitive) and ignores unmanaged playlists,
+  - managed playlist creation is quota-aware and single-flight idempotent,
+  - the service persists newly created playlists with `IsManaged=true` and `Topic=<topic>`.
 - Organize dedup detection issue **#6** is superseded by shipped work already on `main`:
   - local state now enforces **one playlist per video** via the unique
     `playlist_videos.video_id` index and the cleanup migration,
@@ -137,6 +142,16 @@ _Last updated: 2026-07-05_
     - `POST /api/organize/plan` returned `0` videos / `0` actions on the live system.
   - Screenshot artifact captured:
     `docs/assets/ollama-primary-classifier-live.png`
+- **Managed-playlist materialization rollout.**
+  - Local verification:
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter FullyQualifiedName~PlaylistOrganizerTests` → **10 passed**
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~OrganizePlannerServiceTests"` → **14 passed**
+    - `dotnet test tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj --filter "FullyQualifiedName~OrganizeControllerTests|FullyQualifiedName~OperationsControllerTests|FullyQualifiedName~PlaylistsControllerTests|FullyQualifiedName~UndoControllerTests"` → **16 passed**
+  - Behavior change:
+    - `EnsureManagedPlaylistAsync` returns an existing managed playlist when present,
+    - it creates a new private YouTube playlist only when needed,
+    - it throws on quota exhaustion before any partial local state is written.
+  - Remaining: commit, deploy to NAS, capture screenshot artifact, and close issue `#3`.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

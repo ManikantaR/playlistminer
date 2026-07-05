@@ -73,6 +73,16 @@ public class PlaylistOrganizerTests
         return (video, source, target);
     }
 
+    private static PlaylistOrganizer CreateOrganizer(
+        PlaylistMinerDbContext db,
+        Mock<IYouTubeApiClient>? ytMock = null,
+        Mock<IQuotaTracker>? quotaMock = null)
+        => new(
+            db,
+            ytMock?.Object ?? Mock.Of<IYouTubeApiClient>(),
+            quotaMock?.Object ?? Mock.Of<IQuotaTracker>(q => q.IsQuotaExhaustedAsync(It.IsAny<CancellationToken>()) == Task.FromResult(false)),
+            NullLogger<PlaylistOrganizer>.Instance);
+
     [Fact]
     public async Task Test_MoveVideo_AddsToTarget_RemovesFromSource()
     {
@@ -80,7 +90,7 @@ public class PlaylistOrganizerTests
         using var db = CreateDb();
         var (video, source, target) = SeedBasicData(db);
         var ytMock = new Mock<IYouTubeApiClient>();
-        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+        var organizer = CreateOrganizer(db, ytMock);
 
         // Act
         await organizer.MoveVideoAsync(1, 1, 2);
@@ -103,7 +113,7 @@ public class PlaylistOrganizerTests
         using var db = CreateDb();
         SeedBasicData(db);
         var ytMock = new Mock<IYouTubeApiClient>();
-        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+        var organizer = CreateOrganizer(db, ytMock);
 
         var before = DateTime.UtcNow;
 
@@ -150,7 +160,7 @@ public class PlaylistOrganizerTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
-        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+        var organizer = CreateOrganizer(db, ytMock);
 
         // Act
         await organizer.UndoMoveAsync(undoLog.Id);
@@ -184,7 +194,7 @@ public class PlaylistOrganizerTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
-        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+        var organizer = CreateOrganizer(db, ytMock);
 
         // Act & Assert
         await organizer.Invoking(o => o.UndoMoveAsync(undoLog.Id))
@@ -198,7 +208,7 @@ public class PlaylistOrganizerTests
         using var db = CreateDb();
         SeedBasicData(db);
         var ytMock = new Mock<IYouTubeApiClient>();
-        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+        var organizer = CreateOrganizer(db, ytMock);
 
         // Act
         var result = await organizer.ConsolidateAsync();
@@ -294,7 +304,7 @@ public class PlaylistOrganizerTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
-        var organizer = new PlaylistOrganizer(db, ytMock.Object, NullLogger<PlaylistOrganizer>.Instance);
+        var organizer = CreateOrganizer(db, ytMock);
 
         // Act
         var result = await organizer.GetDuplicateReviewAsync();
@@ -310,5 +320,109 @@ public class PlaylistOrganizerTests
             new DuplicatePlaylistDto(managedB.Id, managedB.Name, true, managedB.Topic),
             new DuplicatePlaylistDto(unmanaged.Id, unmanaged.Name, false, unmanaged.Topic)
         ]);
+    }
+
+    [Fact]
+    public async Task Test_EnsureManagedPlaylistAsync_ReturnsExistingManagedPlaylist_CaseInsensitiveAndTrimmed()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+        var managed = new Playlist
+        {
+            Id = 21,
+            YouTubeId = "PLmanaged",
+            Name = "AI Agents",
+            IsManaged = true,
+            Topic = "AI Agents",
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var unmanaged = new Playlist
+        {
+            Id = 22,
+            YouTubeId = "PLunmanaged",
+            Name = "ai agents",
+            IsManaged = false,
+            Topic = null,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        db.Playlists.AddRange(managed, unmanaged);
+        await db.SaveChangesAsync();
+
+        var ytMock = new Mock<IYouTubeApiClient>(MockBehavior.Strict);
+        var organizer = CreateOrganizer(db, ytMock);
+
+        var result = await organizer.EnsureManagedPlaylistAsync("  ai agents ");
+
+        result.Id.Should().Be(managed.Id);
+        result.YouTubeId.Should().Be("PLmanaged");
+        ytMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Test_EnsureManagedPlaylistAsync_CreatesNewManagedPlaylist_WhenMissing()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.CreatePlaylistAsync("AI Agents", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlaylistDto("PLnew", "AI Agents", "Managed by PlaylistMiner", false, 0));
+
+        var organizer = CreateOrganizer(db, ytMock);
+
+        var result = await organizer.EnsureManagedPlaylistAsync("AI Agents");
+
+        result.YouTubeId.Should().Be("PLnew");
+        result.IsManaged.Should().BeTrue();
+        result.Topic.Should().Be("AI Agents");
+
+        var saved = await db.Playlists.SingleAsync(p => p.Topic == "AI Agents");
+        saved.YouTubeId.Should().Be("PLnew");
+        saved.IsManaged.Should().BeTrue();
+        ytMock.Verify(y => y.CreatePlaylistAsync("AI Agents", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Test_EnsureManagedPlaylistAsync_WhenQuotaExhausted_ThrowsWithoutPersisting()
+    {
+        using var db = CreateDb();
+        var quotaMock = new Mock<IQuotaTracker>();
+        quotaMock.Setup(q => q.IsQuotaExhaustedAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var ytMock = new Mock<IYouTubeApiClient>(MockBehavior.Strict);
+        var organizer = CreateOrganizer(db, ytMock, quotaMock);
+
+        await organizer.Invoking(o => o.EnsureManagedPlaylistAsync("AI Agents"))
+            .Should().ThrowAsync<QuotaExhaustedException>();
+
+        (await db.Playlists.CountAsync()).Should().Be(0);
+        ytMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Test_EnsureManagedPlaylistAsync_IsIdempotentAcrossConcurrentCalls()
+    {
+        using var db = CreateDb();
+        var createCalls = 0;
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.CreatePlaylistAsync("AI Agents", It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                createCalls++;
+                return new PlaylistDto("PLnew", "AI Agents", "Managed by PlaylistMiner", false, 0);
+            });
+
+        var organizer = CreateOrganizer(db, ytMock);
+
+        var results = await Task.WhenAll(
+            organizer.EnsureManagedPlaylistAsync("AI Agents"),
+            organizer.EnsureManagedPlaylistAsync(" ai agents "));
+
+        results.Select(r => r.YouTubeId).Distinct().Should().ContainSingle().Which.Should().Be("PLnew");
+        createCalls.Should().Be(1);
+        (await db.Playlists.CountAsync()).Should().Be(1);
     }
 }

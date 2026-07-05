@@ -28,7 +28,7 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 - [x] #6 **(superseded / closed)** Dedup detect path is covered by the local single-playlist
   membership constraint plus remote cleanup planner/executor (`#24`) for YouTube-side cleanup
 - [x] #2 Ollama-primary classifier (reachability-gated; keyword/TF-IDF fallback) → topic+confidence
-- [ ] #3 Topic→managed-playlist materialization (auto-create)
+- [x] #3 Topic→managed-playlist materialization (auto-create)
 - [x] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI preview
 - [ ] #5 Executor — wire `MoveVideoAsync`, ~20/batch, move-budget, idempotent, newest-first, undo
 - [x] #21 Organize observability — activity feed + move-budget quota meter on `/operations`

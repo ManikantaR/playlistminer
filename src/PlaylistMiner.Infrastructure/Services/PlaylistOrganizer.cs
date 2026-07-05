@@ -5,14 +5,72 @@ using PlaylistMiner.Core.Exceptions;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
 using PlaylistMiner.Infrastructure.Data;
+using System.Collections.Concurrent;
 
 namespace PlaylistMiner.Infrastructure.Services;
 
 public class PlaylistOrganizer(
     PlaylistMinerDbContext db,
     IYouTubeApiClient youTubeApiClient,
+    IQuotaTracker quotaTracker,
     ILogger<PlaylistOrganizer> logger) : IPlaylistOrganizer
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> TopicLocks = new(StringComparer.OrdinalIgnoreCase);
+
+    public async Task<Playlist> EnsureManagedPlaylistAsync(string topic, CancellationToken ct = default)
+    {
+        var normalizedTopic = NormalizeTopic(topic);
+        var topicLock = TopicLocks.GetOrAdd(normalizedTopic, _ => new SemaphoreSlim(1, 1));
+
+        await topicLock.WaitAsync(ct);
+        try
+        {
+            var existing = await db.Playlists
+                .FirstOrDefaultAsync(
+                    p => p.IsManaged
+                         && p.Topic != null
+                         && p.Topic.ToLower() == normalizedTopic.ToLower(),
+                    ct);
+
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            if (await quotaTracker.IsQuotaExhaustedAsync(ct))
+            {
+                throw new QuotaExhaustedException();
+            }
+
+            var created = await youTubeApiClient.CreatePlaylistAsync(
+                normalizedTopic,
+                "Managed by PlaylistMiner",
+                ct);
+
+            var now = DateTime.UtcNow;
+            var playlist = new Playlist
+            {
+                YouTubeId = created.YouTubeId,
+                Name = created.Name,
+                Description = created.Description,
+                IsInbox = false,
+                IsManaged = true,
+                Topic = normalizedTopic,
+                CreatedAt = now,
+                UpdatedAt = now,
+                SyncedAt = now
+            };
+
+            db.Playlists.Add(playlist);
+            await db.SaveChangesAsync(ct);
+            return playlist;
+        }
+        finally
+        {
+            topicLock.Release();
+        }
+    }
+
     public async Task MoveVideoAsync(
         int videoId,
         int sourcePlaylistId,
@@ -171,5 +229,13 @@ public class PlaylistOrganizer(
                     .ToList()))
             .OrderBy(dto => dto.Title)
             .ToList();
+    }
+
+    private static string NormalizeTopic(string topic)
+    {
+        var trimmed = topic.Trim();
+        return string.IsNullOrWhiteSpace(trimmed)
+            ? throw new ArgumentException("Topic must not be empty.", nameof(topic))
+            : trimmed;
     }
 }
