@@ -129,7 +129,14 @@ _Last updated: 2026-07-05_
     - `ClassifyAsync` now prefers Ollama over local heuristics,
     - fallback remains non-blocking when the Mac-hosted Ollama endpoint is asleep/unreachable,
     - planner threshold is configurable via `Categorization:AutoFileConfidence` (default `0.65`).
-  - Remaining: commit, deploy to NAS, capture screenshot artifact, and close issue `#2`.
+  - NAS deploy verification succeeded on July 5, 2026.
+  - Live checks:
+    - `GET /api/operations/health` returned healthy dependencies with
+      `workerHealthy: true`, `quotaExhausted: false`, and `ollamaReachable: false`
+      (the intended degraded state that should now fall back cleanly instead of failing),
+    - `POST /api/organize/plan` returned `0` videos / `0` actions on the live system.
+  - Screenshot artifact captured:
+    `docs/assets/ollama-primary-classifier-live.png`
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during

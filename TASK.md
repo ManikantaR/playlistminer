@@ -4,7 +4,7 @@
 > session can resume without re-deriving context. Pairs with [STATUS.md](STATUS.md) (live state).
 > Convention: `[ ]` todo · `[~]` in progress · `[x]` done. Keep issue numbers in sync.
 
-_Last updated: 2026-07-04_
+_Last updated: 2026-07-05_
 
 ## In progress / just landed
 - [x] **Incremental, checkpointed sync** — playlist-by-playlist, committed per playlist, bulk DB
