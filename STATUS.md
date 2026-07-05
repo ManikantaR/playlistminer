@@ -151,7 +151,13 @@ _Last updated: 2026-07-05_
     - `EnsureManagedPlaylistAsync` returns an existing managed playlist when present,
     - it creates a new private YouTube playlist only when needed,
     - it throws on quota exhaustion before any partial local state is written.
-  - Remaining: commit, deploy to NAS, capture screenshot artifact, and close issue `#3`.
+  - NAS deploy verification succeeded on July 5, 2026.
+  - Live checks:
+    - `GET /api/operations/health` returned healthy dependencies with
+      `workerHealthy: true`, `quotaExhausted: false`, and `ollamaReachable: false`,
+    - `POST /api/organize/plan` returned `0` videos / `0` actions on the live system.
+  - Screenshot artifact captured:
+    `docs/assets/managed-playlist-materialization-live.png`
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
