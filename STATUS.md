@@ -188,6 +188,17 @@ _Last updated: 2026-07-05_
     - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter FullyQualifiedName~OrganizeExecutorServiceTests` → **5 passed**
     - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~PlaylistOrganizerTests"` → **17 passed**
     - NAS `pm-api` and `pm-worker` were redeployed with the hardened executor logic.
+  - Move rollback / undo hardening on July 5, 2026:
+    - `IYouTubeApiClient.AddVideoToPlaylistAsync` now returns the created playlist-item id,
+    - `PlaylistOrganizer.MoveVideoAsync` now stores that target playlist-item id locally and in the undo log,
+    - if source removal fails after the target add succeeds, the organizer now compensates by removing the newly-added target item before bubbling the failure,
+    - `UndoMoveAsync` now removes the target video using the actual target playlist-item id rather than the old source-side id.
+  - Additional verification on July 5, 2026:
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **19 passed**
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **26 passed**
+    - `dotnet test tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj --filter "FullyQualifiedName~OrganizeControllerTests|FullyQualifiedName~OrganizeExecuteControllerTests"` → **2 passed**
+    - NAS `pm-api` and `pm-worker` were redeployed again after the rollback/undo fix,
+    - live reads after redeploy remained healthy and `POST /api/organize/plan` still returned `0` videos / `0` actions.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
@@ -206,9 +217,10 @@ _Last updated: 2026-07-05_
 - ~~`UndoRepository.GetPendingAsync` LINQ error~~ — fixed (OrderBy moved before projection);
   `GET /api/undo` returns 200 live.
 - `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
-- Remaining organize-engine gaps are narrower now: executor hardening still needs explicit
-  multi-topic filing and stronger idempotency semantics; `ConsolidateAsync` is still a stub;
-  watch-history import is still unbuilt.
+- Remaining organize-engine gaps are narrower now: executor/product work still needs explicit
+  multi-topic filing policy and a clearer operator path if both the source removal and
+  compensating rollback fail; `ConsolidateAsync` is still a stub; watch-history import is still
+  unbuilt.
 
 ## How to check health fast
 ```

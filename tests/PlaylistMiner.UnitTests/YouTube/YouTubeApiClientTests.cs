@@ -349,10 +349,11 @@ public class YouTubeApiClientTests
             ResiliencePipeline<HttpResponseMessage>.Empty);
 
         // Act
-        await client.AddVideoToPlaylistAsync("targetPL", "vid1", 0);
+        var addedPlaylistItemId = await client.AddVideoToPlaylistAsync("targetPL", "vid1", 0);
         await client.RemoveVideoFromPlaylistAsync("sourcePL", "itemId1");
 
         // Assert
+        addedPlaylistItemId.Should().Be("newItem");
         operations.Should().ContainInOrder("add", "remove");
     }
 

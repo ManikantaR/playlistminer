@@ -7,7 +7,7 @@ public interface IYouTubeApiClient
     Task<List<PlaylistDto>> GetUserPlaylistsAsync(CancellationToken ct = default);
     Task<List<PlaylistItemDto>> GetPlaylistItemsAsync(string playlistId, CancellationToken ct = default);
     Task<List<VideoMetadataDto>> GetVideoMetadataAsync(IEnumerable<string> videoIds, CancellationToken ct = default);
-    Task AddVideoToPlaylistAsync(string playlistId, string videoId, int? position = null, CancellationToken ct = default);
+    Task<string> AddVideoToPlaylistAsync(string playlistId, string videoId, int? position = null, CancellationToken ct = default);
     Task RemoveVideoFromPlaylistAsync(string playlistId, string playlistItemId, CancellationToken ct = default);
     Task<PlaylistDto> CreatePlaylistAsync(string title, string description, CancellationToken ct = default);
 }
