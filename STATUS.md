@@ -193,11 +193,21 @@ _Last updated: 2026-07-05_
     - `PlaylistOrganizer.MoveVideoAsync` now stores that target playlist-item id locally and in the undo log,
     - if source removal fails after the target add succeeds, the organizer now compensates by removing the newly-added target item before bubbling the failure,
     - `UndoMoveAsync` now removes the target video using the actual target playlist-item id rather than the old source-side id.
+  - Manual-intervention fault path on July 5, 2026:
+    - irrecoverable remote partial failures now raise `ManualInterventionRequiredException`,
+    - organize execution now treats that path as a **failed run** instead of a normal skipped item,
+    - the current batch stops immediately, remaining moves are left deferred, and the failure is logged as an error-level pipeline event.
   - Additional verification on July 5, 2026:
     - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **19 passed**
     - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **26 passed**
     - `dotnet test tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj --filter "FullyQualifiedName~OrganizeControllerTests|FullyQualifiedName~OrganizeExecuteControllerTests"` → **2 passed**
     - NAS `pm-api` and `pm-worker` were redeployed again after the rollback/undo fix,
+    - live reads after redeploy remained healthy and `POST /api/organize/plan` still returned `0` videos / `0` actions.
+  - Additional manual-intervention verification on July 5, 2026:
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~OrganizeExecutorServiceTests"` → **18 passed**
+    - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **28 passed**
+    - `dotnet test tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj --filter "FullyQualifiedName~OrganizeControllerTests|FullyQualifiedName~OrganizeExecuteControllerTests"` → **2 passed**
+    - NAS `pm-api` and `pm-worker` were redeployed again after the explicit manual-intervention fault-path change,
     - live reads after redeploy remained healthy and `POST /api/organize/plan` still returned `0` videos / `0` actions.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
@@ -218,9 +228,8 @@ _Last updated: 2026-07-05_
   `GET /api/undo` returns 200 live.
 - `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
 - Remaining organize-engine gaps are narrower now: executor/product work still needs explicit
-  multi-topic filing policy and a clearer operator path if both the source removal and
-  compensating rollback fail; `ConsolidateAsync` is still a stub; watch-history import is still
-  unbuilt.
+  multi-topic filing policy and a fuller operator UX around manual-intervention failures;
+  `ConsolidateAsync` is still a stub; watch-history import is still unbuilt.
 
 ## How to check health fast
 ```

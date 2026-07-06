@@ -167,6 +167,36 @@ public class PlaylistOrganizerTests
     }
 
     [Fact]
+    public async Task Test_MoveVideo_WhenSourceRemovalAndRollbackFail_ThrowsManualInterventionRequiredException()
+    {
+        // Arrange
+        using var db = CreateDb();
+        SeedBasicData(db);
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("PLI_target_item");
+        ytMock.Setup(y => y.RemoveVideoFromPlaylistAsync("PLsource", "PLI_source_item", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("source remove failed"));
+        ytMock.Setup(y => y.RemoveVideoFromPlaylistAsync("PLtarget", "PLI_target_item", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("rollback failed"));
+        var organizer = CreateOrganizer(db, ytMock);
+
+        // Act
+        await organizer.Invoking(o => o.MoveVideoAsync(1, 1, 2))
+            .Should().ThrowAsync<ManualInterventionRequiredException>()
+            .WithMessage("*Manual cleanup is required*");
+
+        // Assert
+        var sourcePv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 1 && pv.VideoId == 1);
+        sourcePv.Should().NotBeNull();
+
+        var targetPv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 2 && pv.VideoId == 1);
+        targetPv.Should().BeNull();
+
+        (await db.UndoLogs.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Test_UndoMove_ReversesAction_WithinWindow()
     {
         // Arrange

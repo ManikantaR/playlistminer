@@ -107,7 +107,7 @@ public class PlaylistOrganizer(
             }
             catch (Exception rollbackEx)
             {
-                throw new InvalidOperationException(
+                throw new ManualInterventionRequiredException(
                     $"Move of video {videoId} partially succeeded on YouTube and rollback failed. Manual cleanup is required.",
                     new AggregateException(ex, rollbackEx));
             }

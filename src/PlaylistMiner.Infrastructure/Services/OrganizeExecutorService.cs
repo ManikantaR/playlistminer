@@ -147,6 +147,29 @@ public sealed class OrganizeExecutorService(
 
                     return new OrganizeExecutionResultDto(plan.VideosExamined, executableMoves.Count, executed, skipped, deferredCount, errors, runId);
                 }
+                catch (ManualInterventionRequiredException ex)
+                {
+                    var remaining = executableMoves.Count - index;
+                    deferredCount += remaining;
+                    errors.Add(ex.Message);
+
+                    await tracker.LogEventAsync(
+                        runId,
+                        "error",
+                        "manual_intervention_required",
+                        ex.Message,
+                        ct: ct);
+
+                    await tracker.FailRunAsync(runId, ex.Message, run =>
+                    {
+                        run.VideosProcessed = executed;
+                        run.VideosSkipped = skipped;
+                        run.VideosDeferred = deferredCount;
+                        run.ErrorsCount = errors.Count;
+                    }, ct);
+
+                    return new OrganizeExecutionResultDto(plan.VideosExamined, executableMoves.Count, executed, skipped, deferredCount, errors, runId);
+                }
                 catch (Exception ex)
                 {
                     skipped++;

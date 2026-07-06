@@ -231,6 +231,61 @@ public class OrganizeExecutorServiceTests
     }
 
     [Fact]
+    public async Task Test_ExecuteAsync_WhenManualInterventionIsRequired_FailsRunAndStopsBatch()
+    {
+        using var db = CreateDb();
+        SeedInbox(db, playlistId: 17);
+        SeedVideoInPlaylist(db, 1, "vid-1", 17);
+        SeedVideoInPlaylist(db, 2, "vid-2", 17);
+        SeedManagedPlaylist(db, 51, "AI");
+        SeedManagedPlaylist(db, 52, "ML");
+
+        var planner = new Mock<IOrganizePlannerService>();
+        planner.Setup(x => x.BuildPlanAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OrganizePlanDto(
+                2,
+                2,
+                200,
+                [
+                    new OrganizePlanItemDto("move", 1, "vid-1", "Video 1", "Incoming", "AI", 51, "AI", 0.95f, 100, "Ready"),
+                    new OrganizePlanItemDto("move", 2, "vid-2", "Video 2", "Incoming", "ML", 52, "ML", 0.81f, 100, "Ready")
+                ]));
+
+        var organizer = new Mock<IPlaylistOrganizer>();
+        organizer.Setup(x => x.MoveVideoAsync(1, 17, 51, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ManualInterventionRequiredException(
+                "Move of video 1 partially succeeded on YouTube and rollback failed. Manual cleanup is required.",
+                new AggregateException(new InvalidOperationException("source"), new InvalidOperationException("rollback"))));
+
+        var operations = new Mock<IOperationsObservabilityService>();
+        operations.Setup(x => x.GetMoveBudgetAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OperationsQuotaDto(0, 80, DateTime.UtcNow.AddHours(1), 80, false, "Move budget available."));
+
+        var service = new OrganizeExecutorService(
+            db,
+            planner.Object,
+            organizer.Object,
+            operations.Object,
+            new PipelineRunTracker(db),
+            CreateConfiguration(batchSize: 5),
+            NullLogger<OrganizeExecutorService>.Instance);
+
+        var result = await service.ExecuteAsync();
+
+        result.MovesExecuted.Should().Be(0);
+        result.MovesSkipped.Should().Be(0);
+        result.DeferredCount.Should().Be(2);
+        result.Errors.Should().ContainSingle(x => x.Contains("Manual cleanup is required"));
+
+        var run = db.PipelineRuns.Single(r => r.RunId == result.RunId);
+        run.Status.Should().Be("failed");
+        run.ErrorsCount.Should().Be(1);
+
+        organizer.Verify(x => x.MoveVideoAsync(1, 17, 51, It.IsAny<CancellationToken>()), Times.Once);
+        organizer.Verify(x => x.MoveVideoAsync(2, 17, 52, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Test_ExecuteAsync_WhenVideoAlreadyMovedToTarget_SkipsAsIdempotentNoOp()
     {
         using var db = CreateDb();
