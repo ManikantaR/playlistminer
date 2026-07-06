@@ -281,7 +281,7 @@ describe('OperationsPage', () => {
     expect(screen.getByText('Organize Move Budget')).toBeInTheDocument();
     expect(screen.getByText(/34 \/ 80/)).toBeInTheDocument();
     expect(screen.getByText('Organize Activity')).toBeInTheDocument();
-    expect(screen.getByText('Removed duplicate video from playlist "Inbox".')).toBeInTheDocument();
+    expect(screen.getAllByText('Removed duplicate video from playlist "Inbox".').length).toBeGreaterThan(0);
   });
 
   it('renders neutral loading copy while move budget is still loading', () => {
@@ -340,7 +340,7 @@ describe('OperationsPage', () => {
 
     render(<OperationsPage />);
 
-    expect(screen.getByText('Removed duplicate video from playlist "Inbox".')).toBeInTheDocument();
+    expect(screen.getAllByText('Removed duplicate video from playlist "Inbox".').length).toBeGreaterThan(0);
     expect(screen.getByText('3 removals executed')).toBeInTheDocument();
     expect(screen.getByText('Remote Cleanup Removals')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
@@ -366,6 +366,42 @@ describe('OperationsPage', () => {
     expect(screen.getAllByText('Failed').length).toBeGreaterThan(0);
     expect(screen.getByText('Execution Failure Details')).toBeInTheDocument();
     expect(screen.getByText('YouTube API Quota exceeded limit.')).toBeInTheDocument();
+  });
+
+  it('renders manual cleanup guidance for irrecoverable organize failures', () => {
+    const failedRun: PipelineRun = {
+      ...sampleActiveSyncRun,
+      runId: 'organize-run-999',
+      pipelineType: 'organize-execute',
+      status: 'failed',
+      phase: 'manual_intervention_required',
+      error: 'Move of video 1 partially succeeded on YouTube and rollback failed. Manual cleanup is required.',
+      completedAt: new Date().toISOString(),
+      currentMessage: 'Run failed: Manual cleanup is required.',
+      videosDeferred: 3,
+    };
+
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult(failedRun));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([failedRun]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([
+      ...sampleEvents,
+      {
+        id: 3,
+        runId: 'organize-run-999',
+        occurredAt: new Date().toISOString(),
+        level: 'error',
+        phase: 'manual_intervention_required',
+        message: 'Move of video 1 partially succeeded on YouTube and rollback failed. Manual cleanup is required.',
+        payloadJson: null,
+      },
+    ]));
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Manual Cleanup Required')).toBeInTheDocument();
+    expect(screen.getByText(/youtube state may now be inconsistent/i)).toBeInTheDocument();
+    expect(screen.getByText(/remaining organize moves have been deferred to prevent compounding the inconsistency/i)).toBeInTheDocument();
   });
 
   it('renders dependency health sections with correct badges', () => {

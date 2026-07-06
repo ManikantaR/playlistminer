@@ -66,9 +66,18 @@ function getPipelineDisplayName(pipelineType: string) {
       return 'Sync Job';
     case 'remote-duplicate-cleanup':
       return 'Remote Cleanup';
+    case 'organize-execute':
+      return 'Organize Execute';
     default:
       return 'Categorization Job';
   }
+}
+
+function isManualInterventionFailure(run: { pipelineType: string; status: string; error: string | null }) {
+  return run.pipelineType === 'organize-execute'
+    && run.status === 'failed'
+    && !!run.error
+    && run.error.includes('Manual cleanup is required');
 }
 
 export default function OperationsPage() {
@@ -257,6 +266,14 @@ export default function OperationsPage() {
     }
 
     if (activeRun) {
+      if (isManualInterventionFailure(activeRun)) {
+        return {
+          title: 'Manual Cleanup Required',
+          message: 'The last organize execution hit an irrecoverable remote partial failure. YouTube state may now be inconsistent and remaining organize moves have been deferred.',
+          bg: 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/20 dark:text-red-300 dark:border-red-900/50',
+          icon: <AlertTriangle className="w-5 h-5 text-red-500" />
+        };
+      }
       if (activeRun.status === 'failed') {
         return {
           title: 'Pipeline Run Failed',
@@ -440,6 +457,18 @@ export default function OperationsPage() {
                 <div className="bg-red-50 dark:bg-red-950/20 border-l-4 border-red-500 p-3 rounded text-sm text-red-800 dark:text-red-300">
                   <p className="font-semibold">Execution Failure Details</p>
                   <p className="mt-1 font-mono text-xs overflow-x-auto whitespace-pre-wrap">{activeRun.error}</p>
+                </div>
+              )}
+
+              {isManualInterventionFailure(activeRun) && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200">
+                  <p className="font-semibold">Operator Action Required</p>
+                  <p className="mt-2">
+                    Inspect the affected playlists on YouTube, reconcile the duplicate or half-moved video manually, and only then retry organize execution.
+                  </p>
+                  <p className="mt-2">
+                    Remaining organize moves have been deferred to prevent compounding the inconsistency.
+                  </p>
                 </div>
               )}
 

@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { useBuildOrganizePlan, useExecuteOrganize } from '@/hooks/useOrganize';
+import { usePipelineHistory } from '@/hooks/usePipeline';
 
 function formatActionLabel(action: string, targetPlaylistName: string | null) {
   switch (action) {
@@ -17,9 +19,22 @@ function formatActionLabel(action: string, targetPlaylistName: string | null) {
   }
 }
 
+function isManualInterventionRun(run: {
+  pipelineType: string;
+  status: string;
+  error: string | null;
+}) {
+  return run.pipelineType === 'organize-execute'
+    && run.status === 'failed'
+    && !!run.error
+    && run.error.includes('Manual cleanup is required');
+}
+
 export default function OrganizePage() {
   const organizePlan = useBuildOrganizePlan();
   const organizeExecution = useExecuteOrganize();
+  const pipelineHistory = usePipelineHistory();
+  const latestManualInterventionRun = pipelineHistory.data?.find(isManualInterventionRun);
 
   const buildPlan = async () => {
     await organizePlan.mutateAsync();
@@ -42,6 +57,33 @@ export default function OrganizePage() {
           {organizePlan.isPending ? 'Planning...' : 'Build Organize Plan'}
         </Button>
       </div>
+
+      {latestManualInterventionRun && (
+        <Card className="border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20">
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-red-900 dark:text-red-200">Manual Cleanup Required</p>
+              <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+                The last organize execution failed after a remote partial move and needs operator review before another batch runs.
+              </p>
+            </div>
+            <div className="rounded-lg bg-white/70 px-3 py-2 text-sm text-red-900 dark:bg-black/10 dark:text-red-200">
+              Run ID {latestManualInterventionRun.runId}
+            </div>
+            <p className="text-sm text-red-800 dark:text-red-300">
+              Review the run details on the operations page before executing another batch.
+            </p>
+            <div>
+              <Link
+                href="/operations"
+                className="text-sm font-semibold text-red-900 underline underline-offset-4 hover:text-red-700 dark:text-red-200 dark:hover:text-red-100"
+              >
+                Open Operations Logs
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

@@ -197,6 +197,10 @@ _Last updated: 2026-07-05_
     - irrecoverable remote partial failures now raise `ManualInterventionRequiredException`,
     - organize execution now treats that path as a **failed run** instead of a normal skipped item,
     - the current batch stops immediately, remaining moves are left deferred, and the failure is logged as an error-level pipeline event.
+  - Operator-facing manual-intervention UX on July 5, 2026:
+    - `/operations` now shows a specific **Manual Cleanup Required** banner for irrecoverable organize failures,
+    - failed organize runs now render operator guidance explaining that YouTube state may be inconsistent and remaining moves were deferred,
+    - `/organize` now surfaces the latest failed organize run that requires manual cleanup and links operators to `/operations` before they retry a batch.
   - Additional verification on July 5, 2026:
     - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **19 passed**
     - `dotnet test tests/PlaylistMiner.UnitTests/PlaylistMiner.UnitTests.csproj --filter "FullyQualifiedName~OrganizeExecutorServiceTests|FullyQualifiedName~OrganizeExecutionJobTests|FullyQualifiedName~PlaylistOrganizerTests|FullyQualifiedName~YouTubeApiClientTests"` → **26 passed**
@@ -209,6 +213,10 @@ _Last updated: 2026-07-05_
     - `dotnet test tests/PlaylistMiner.IntegrationTests/PlaylistMiner.IntegrationTests.csproj --filter "FullyQualifiedName~OrganizeControllerTests|FullyQualifiedName~OrganizeExecuteControllerTests"` → **2 passed**
     - NAS `pm-api` and `pm-worker` were redeployed again after the explicit manual-intervention fault-path change,
     - live reads after redeploy remained healthy and `POST /api/organize/plan` still returned `0` videos / `0` actions.
+  - Frontend/operator UX verification on July 5, 2026:
+    - `npm test -- --runInBand OrganizePage.test.tsx Operations.test.tsx` → **22 passed**
+    - NAS `pm-web` was redeployed with the manual-intervention operator guidance UI,
+    - follow-up live screenshot + read-only verification attempts were blocked by the session approval-usage window and should be refreshed in the next approval window.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
@@ -228,8 +236,8 @@ _Last updated: 2026-07-05_
   `GET /api/undo` returns 200 live.
 - `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
 - Remaining organize-engine gaps are narrower now: executor/product work still needs explicit
-  multi-topic filing policy and a fuller operator UX around manual-intervention failures;
-  `ConsolidateAsync` is still a stub; watch-history import is still unbuilt.
+  multi-topic filing policy; `ConsolidateAsync` is still a stub; watch-history import is still
+  unbuilt.
 
 ## How to check health fast
 ```
