@@ -4,7 +4,7 @@
 > session can resume without re-deriving context. Pairs with [STATUS.md](STATUS.md) (live state).
 > Convention: `[ ]` todo · `[~]` in progress · `[x]` done. Keep issue numbers in sync.
 
-_Last updated: 2026-07-05_
+_Last updated: 2026-07-06_
 
 ## In progress / just landed
 - [x] **Incremental, checkpointed sync** — playlist-by-playlist, committed per playlist, bulk DB
@@ -18,8 +18,8 @@ _Last updated: 2026-07-05_
   runbook updates.
 
 ## Organize Engine — locked build order (`docs/ORGANIZE-ENGINE-SPEC.md` §0, §8)
-Decisions: playlists primary (tags deferred) · aggressive auto-file + 7-day undo · up-to-2
-topics/video · newest-first (`position 0`) insert, no reorder quota · ~20/batch, ~80 moves/day
+Decisions: playlists primary (tags deferred) · aggressive auto-file + 7-day undo · exactly 1
+managed playlist/video · newest-first (`position 0`) insert, no reorder quota · ~20/batch, ~80 moves/day
 budget · checkpoint per video + idempotent · dedup detect first · Telegram digest primary.
 Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, Sonnet for UI/docs).
 
@@ -30,7 +30,7 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 - [x] #2 Ollama-primary classifier (reachability-gated; keyword/TF-IDF fallback) → topic+confidence
 - [x] #3 Topic→managed-playlist materialization (auto-create)
 - [x] #4 Reorg planner (dry-run) + `POST /api/organize/plan` + Organize UI preview
-- [~] #5 Executor — manual/API/worker execution slice landed; remaining work is multi-topic filing policy
+- [x] #5 Executor — manual/API/worker execution slice landed, including explicit single-topic filing policy under the one-playlist rule
 - [x] #21 Organize observability — activity feed + move-budget quota meter on `/operations`
 - [ ] #22 Telegram per-run organize digest (primary "what the agent did" channel)
 - [x] #24 Remote YouTube duplicate cleanup planner + executor — merged to `main` via PR #25;

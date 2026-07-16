@@ -14,6 +14,8 @@ public sealed class OrganizePlannerService(
     IOptions<CategorizationOptions> options,
     ILogger<OrganizePlannerService> logger) : IOrganizePlannerService
 {
+    private sealed record TopicCandidate(string Topic, float Confidence);
+
     public async Task<OrganizePlanDto> BuildPlanAsync(CancellationToken ct = default)
     {
         var confidenceThreshold = options.Value.AutoFileConfidence;
@@ -54,18 +56,20 @@ public sealed class OrganizePlannerService(
 
         foreach (var video in inboxVideos.OrderBy(v => v.Title, StringComparer.OrdinalIgnoreCase))
         {
-            var bestTopic = video.Tags
-                .Select(tag => new
-                {
-                    Topic = tag.Name,
-                    Confidence = GetEffectiveConfidence(tag.Source, tag.Confidence),
-                    tag.Source
-                })
+            var rankedTopics = video.Tags
+                .Select(tag => new TopicCandidate(
+                    tag.Name,
+                    GetEffectiveConfidence(tag.Source, tag.Confidence)))
                 .OrderByDescending(tag => tag.Confidence)
                 .ThenBy(tag => tag.Topic, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
+                .ToList();
 
-            if (bestTopic is null || bestTopic.Confidence < confidenceThreshold)
+            var bestTopic = rankedTopics.FirstOrDefault();
+            var qualifyingTopics = rankedTopics
+                .Where(tag => tag.Confidence >= confidenceThreshold)
+                .ToList();
+
+            if (qualifyingTopics.Count == 0 || bestTopic is null)
             {
                 items.Add(new OrganizePlanItemDto(
                     "review",
@@ -112,7 +116,7 @@ public sealed class OrganizePlannerService(
                 bestTopic.Topic,
                 bestTopic.Confidence,
                 100,
-                "Best topic confidence is above threshold."));
+                BuildMoveReason(bestTopic.Topic, qualifyingTopics)));
         }
 
         return new OrganizePlanDto(
@@ -130,5 +134,22 @@ public sealed class OrganizePlannerService(
         }
 
         return confidence ?? 0.0f;
+    }
+
+    private static string BuildMoveReason(
+        string winningTopic,
+        IReadOnlyList<TopicCandidate> qualifyingTopics)
+    {
+        if (qualifyingTopics.Count <= 1)
+        {
+            return "Best topic confidence is above threshold.";
+        }
+
+        var secondaryTopics = qualifyingTopics
+            .Skip(1)
+            .Select(topic => topic.Topic)
+            .ToList();
+
+        return $"Multiple topics cleared the threshold, but the single topic filing policy chose \"{winningTopic}\" and deferred secondary topics ({string.Join(", ", secondaryTopics)}).";
     }
 }

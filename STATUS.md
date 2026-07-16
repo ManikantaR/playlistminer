@@ -4,7 +4,7 @@
 > changes (deploy, sync run, new bug). Pairs with [TASK.md](TASK.md) (the backlog).
 > Goal: any session — human or agent — can resume cold from this file.
 
-_Last updated: 2026-07-05_
+_Last updated: 2026-07-06_
 
 ## Deployment
 | Component | Where | State |
@@ -217,6 +217,10 @@ _Last updated: 2026-07-05_
     - `npm test -- --runInBand OrganizePage.test.tsx Operations.test.tsx` → **22 passed**
     - NAS `pm-web` was redeployed with the manual-intervention operator guidance UI,
     - follow-up live screenshot + read-only verification attempts were blocked by the session approval-usage window and should be refreshed in the next approval window.
+  - Single-topic filing policy alignment on July 6, 2026:
+    - planner behavior is now explicitly documented/tested as **one managed playlist per video**,
+    - when multiple topics clear the threshold, organize chooses the single highest-confidence winner and defers secondary topics instead of multi-homing the video,
+    - `docs/ORGANIZE-ENGINE-SPEC.md` now matches the shipped local/remote dedup direction instead of the old "up to 2 topics/video" design text.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
@@ -235,9 +239,8 @@ _Last updated: 2026-07-05_
 - ~~`UndoRepository.GetPendingAsync` LINQ error~~ — fixed (OrderBy moved before projection);
   `GET /api/undo` returns 200 live.
 - `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
-- Remaining organize-engine gaps are narrower now: executor/product work still needs explicit
-  multi-topic filing policy; `ConsolidateAsync` is still a stub; watch-history import is still
-  unbuilt.
+- Remaining organize-engine gaps are narrower now: `ConsolidateAsync` is still a stub;
+  Telegram digests and process-now are still unbuilt; watch-history import is still unbuilt.
 
 ## How to check health fast
 ```
