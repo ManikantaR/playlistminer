@@ -7,7 +7,9 @@ namespace PlaylistMiner.Api.Controllers;
 
 [ApiController]
 [Route("api/organize")]
-public class OrganizeController(IOrganizePlannerService organizePlannerService) : ControllerBase
+public class OrganizeController(
+    IOrganizePlannerService organizePlannerService,
+    IOrganizeExecutorService organizeExecutorService) : ControllerBase
 {
     [HttpPost("plan")]
     [ProducesResponseType<OrganizePlanDto>(StatusCodes.Status200OK)]
@@ -15,5 +17,13 @@ public class OrganizeController(IOrganizePlannerService organizePlannerService) 
     {
         var plan = await organizePlannerService.BuildPlanAsync(ct);
         return Ok(plan);
+    }
+
+    [HttpPost("execute")]
+    [ProducesResponseType<OrganizeExecutionResultDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ExecuteAsync(CancellationToken ct = default)
+    {
+        var result = await organizeExecutorService.ExecuteAsync(ct);
+        return Ok(result);
     }
 }

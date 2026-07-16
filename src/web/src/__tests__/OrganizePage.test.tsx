@@ -3,12 +3,16 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 
 jest.mock('@/hooks/useOrganize');
+jest.mock('@/hooks/usePipeline');
 
-import { useBuildOrganizePlan } from '@/hooks/useOrganize';
+import { useBuildOrganizePlan, useExecuteOrganize } from '@/hooks/useOrganize';
+import { usePipelineHistory } from '@/hooks/usePipeline';
 import OrganizePage from '../app/organize/page';
-import type { OrganizePlan } from '@/types';
+import type { OrganizeExecutionResult, OrganizePlan, PipelineRun } from '@/types';
 
 const mockUseBuildOrganizePlan = useBuildOrganizePlan as jest.MockedFunction<typeof useBuildOrganizePlan>;
+const mockUseExecuteOrganize = useExecuteOrganize as jest.MockedFunction<typeof useExecuteOrganize>;
+const mockUsePipelineHistory = usePipelineHistory as jest.MockedFunction<typeof usePipelineHistory>;
 
 const renderPage = () => {
   const queryClient = new QueryClient();
@@ -23,6 +27,15 @@ const renderPage = () => {
 describe('OrganizePage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUsePipelineHistory.mockReturnValue({
+      data: [],
+      isPending: false,
+    } as ReturnType<typeof usePipelineHistory>);
+    mockUseExecuteOrganize.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteOrganize>);
   });
 
   it('renders organize plan results after building the plan', () => {
@@ -89,6 +102,35 @@ describe('OrganizePage', () => {
     expect(screen.getByText('Needs review')).toBeInTheDocument();
   });
 
+  it('renders organize execution summary after executing a batch', () => {
+    const sampleExecution: OrganizeExecutionResult = {
+      videosExamined: 3,
+      movesPlanned: 2,
+      movesExecuted: 2,
+      movesSkipped: 0,
+      deferredCount: 1,
+      errors: [],
+      runId: 'run-123',
+    };
+
+    mockUseBuildOrganizePlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildOrganizePlan>);
+    mockUseExecuteOrganize.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: sampleExecution,
+      isPending: false,
+    } as ReturnType<typeof useExecuteOrganize>);
+
+    renderPage();
+
+    expect(screen.getByText('Last execution')).toBeInTheDocument();
+    expect(screen.getByText('Executed')).toBeInTheDocument();
+    expect(screen.getByText(/Run ID/)).toBeInTheDocument();
+  });
+
   it('triggers plan building from the page action', () => {
     const mutateAsync = jest.fn();
 
@@ -102,5 +144,73 @@ describe('OrganizePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Build Organize Plan' }));
     expect(mutateAsync).toHaveBeenCalled();
+  });
+
+  it('triggers organize execution from the page action', () => {
+    const mutateAsync = jest.fn();
+
+    mockUseBuildOrganizePlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildOrganizePlan>);
+    mockUseExecuteOrganize.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useExecuteOrganize>);
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Execute Organize Batch' }));
+    expect(mutateAsync).toHaveBeenCalled();
+  });
+
+  it('renders manual intervention guidance when the latest organize run failed irrecoverably', () => {
+    const failedRun: PipelineRun = {
+      runId: 'organize-run-999',
+      pipelineType: 'organize-execute',
+      status: 'failed',
+      phase: 'manual_intervention_required',
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      currentMessage: 'Run failed: Manual cleanup is required.',
+      error: 'Move of video 1 partially succeeded on YouTube and rollback failed. Manual cleanup is required.',
+      playlistsDiscovered: 0,
+      playlistsProcessed: 0,
+      playlistItemsFetched: 0,
+      uniqueVideoIdsIdentified: 0,
+      videoMetadataBatchesTotal: 0,
+      videoMetadataBatchesCompleted: 0,
+      videosUpserted: 0,
+      playlistVideoLinksWritten: 0,
+      videosArchived: 0,
+      videosDeferred: 1,
+      errorsCount: 1,
+      videosPendingTagging: 1,
+      videosProcessed: 0,
+      videosTagged: 0,
+      videosSkipped: 0,
+      ruleBasedHits: 0,
+      tfidfHits: 0,
+      ollamaHits: 0,
+    };
+
+    mockUseBuildOrganizePlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildOrganizePlan>);
+    mockUsePipelineHistory.mockReturnValue({
+      data: [failedRun],
+      isPending: false,
+    } as ReturnType<typeof usePipelineHistory>);
+
+    renderPage();
+
+    expect(screen.getByText('Manual Cleanup Required')).toBeInTheDocument();
+    expect(screen.getByText(/organize-run-999/)).toBeInTheDocument();
+    expect(screen.getByText(/review the run details on the operations page before executing another batch/i)).toBeInTheDocument();
   });
 });

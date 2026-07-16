@@ -15,6 +15,7 @@ public class OrganizeControllerTests
     public async Task Test_BuildOrganizePlan_Returns200_WithPreview()
     {
         var mockPlanner = new Mock<IOrganizePlannerService>();
+        var mockExecutor = new Mock<IOrganizeExecutorService>();
         mockPlanner.Setup(s => s.BuildPlanAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new OrganizePlanDto(
                 2,
@@ -50,6 +51,7 @@ public class OrganizeControllerTests
         using var factory = new PlaylistMinerWebAppFactory(services =>
         {
             services.AddSingleton(mockPlanner.Object);
+            services.AddSingleton(mockExecutor.Object);
         });
         var client = factory.CreateClient();
 

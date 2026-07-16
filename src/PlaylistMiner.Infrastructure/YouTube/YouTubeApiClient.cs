@@ -143,7 +143,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
         return results;
     }
 
-    public async Task AddVideoToPlaylistAsync(string playlistId, string videoId, CancellationToken ct = default)
+    public async Task<string> AddVideoToPlaylistAsync(string playlistId, string videoId, int? position = null, CancellationToken ct = default)
     {
         var token = await _tokenProvider.GetAccessTokenAsync(ct);
         var body = JsonSerializer.Serialize(new
@@ -151,6 +151,7 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
             snippet = new
             {
                 playlistId,
+                position,
                 resourceId = new { kind = "youtube#video", videoId }
             }
         });
@@ -160,6 +161,11 @@ public sealed class YouTubeApiClient : IYouTubeApiClient
                 token, new StringContent(body, Encoding.UTF8, "application/json"), ct), ct);
 
         await EnsureSuccessOrThrowAsync(response, ct);
+
+        var created = await response.Content.ReadFromJsonAsync<YouTubePlaylistItem>(JsonOptions, ct)
+            ?? throw new InvalidOperationException("Null response from addVideoToPlaylist endpoint.");
+
+        return created.Id;
     }
 
     public async Task RemoveVideoFromPlaylistAsync(string playlistId, string playlistItemId, CancellationToken ct = default)

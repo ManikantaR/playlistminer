@@ -94,8 +94,28 @@ public class PlaylistOrganizer(
         logger.LogInformation("Moving video {VideoId} from playlist {Source} to {Target}.",
             videoId, sourcePlaylistId, targetPlaylistId);
 
-        await youTubeApiClient.AddVideoToPlaylistAsync(targetPlaylist.YouTubeId, video.YouTubeId, ct);
-        await youTubeApiClient.RemoveVideoFromPlaylistAsync(sourcePlaylist.YouTubeId, playlistItemId, ct);
+        var targetPlaylistItemId = await youTubeApiClient.AddVideoToPlaylistAsync(targetPlaylist.YouTubeId, video.YouTubeId, 0, ct);
+        try
+        {
+            await youTubeApiClient.RemoveVideoFromPlaylistAsync(sourcePlaylist.YouTubeId, playlistItemId, ct);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                await youTubeApiClient.RemoveVideoFromPlaylistAsync(targetPlaylist.YouTubeId, targetPlaylistItemId, ct);
+            }
+            catch (Exception rollbackEx)
+            {
+                throw new ManualInterventionRequiredException(
+                    $"Move of video {videoId} partially succeeded on YouTube and rollback failed. Manual cleanup is required.",
+                    new AggregateException(ex, rollbackEx));
+            }
+
+            throw new InvalidOperationException(
+                $"Move of video {videoId} failed after adding it to the target playlist. Rolled back target addition.",
+                ex);
+        }
 
         if (sourcePlaylistVideo is not null)
         {
@@ -112,8 +132,14 @@ public class PlaylistOrganizer(
                 PlaylistId = targetPlaylistId,
                 VideoId = videoId,
                 Position = 0,
+                PlaylistItemId = targetPlaylistItemId,
                 AddedAt = DateTime.UtcNow
             });
+        }
+        else
+        {
+            targetPlaylistVideo.Position = 0;
+            targetPlaylistVideo.PlaylistItemId = targetPlaylistItemId;
         }
 
         db.UndoLogs.Add(new UndoLog
@@ -122,7 +148,7 @@ public class PlaylistOrganizer(
             Action = "Move",
             SourcePlaylistId = sourcePlaylistId,
             TargetPlaylistId = targetPlaylistId,
-            PlaylistItemId = playlistItemId,
+            PlaylistItemId = targetPlaylistItemId,
             PerformedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
             Undone = false
@@ -152,7 +178,7 @@ public class PlaylistOrganizer(
         logger.LogInformation("Undoing move of video {VideoId} from playlist {Target} back to {Source}.",
             video.Id, targetPlaylist.Id, sourcePlaylist.Id);
 
-        await youTubeApiClient.AddVideoToPlaylistAsync(sourcePlaylist.YouTubeId, video.YouTubeId, ct);
+        await youTubeApiClient.AddVideoToPlaylistAsync(sourcePlaylist.YouTubeId, video.YouTubeId, 0, ct);
         await youTubeApiClient.RemoveVideoFromPlaylistAsync(
             targetPlaylist.YouTubeId,
             undoLog.PlaylistItemId ?? video.YouTubeId,

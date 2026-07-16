@@ -90,13 +90,15 @@ public class PlaylistOrganizerTests
         using var db = CreateDb();
         var (video, source, target) = SeedBasicData(db);
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("PLI_target_item");
         var organizer = CreateOrganizer(db, ytMock);
 
         // Act
         await organizer.MoveVideoAsync(1, 1, 2);
 
         // Assert
-        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", It.IsAny<CancellationToken>()), Times.Once);
+        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()), Times.Once);
         ytMock.Verify(y => y.RemoveVideoFromPlaylistAsync("PLsource", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
 
         var sourcePv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 1 && pv.VideoId == 1);
@@ -113,6 +115,8 @@ public class PlaylistOrganizerTests
         using var db = CreateDb();
         SeedBasicData(db);
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("PLI_target_item");
         var organizer = CreateOrganizer(db, ytMock);
 
         var before = DateTime.UtcNow;
@@ -125,8 +129,71 @@ public class PlaylistOrganizerTests
         undoLog.Should().NotBeNull();
         undoLog!.SourcePlaylistId.Should().Be(1);
         undoLog.TargetPlaylistId.Should().Be(2);
+        undoLog.PlaylistItemId.Should().Be("PLI_target_item");
         undoLog.ExpiresAt.Should().BeCloseTo(before.AddDays(7), TimeSpan.FromSeconds(5));
         undoLog.Undone.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Test_MoveVideo_WhenSourceRemovalFails_RollsBackTargetAdd_AndLeavesLocalStateUntouched()
+    {
+        // Arrange
+        using var db = CreateDb();
+        SeedBasicData(db);
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("PLI_target_item");
+        ytMock.Setup(y => y.RemoveVideoFromPlaylistAsync("PLsource", "PLI_source_item", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("source remove failed"));
+        ytMock.Setup(y => y.RemoveVideoFromPlaylistAsync("PLtarget", "PLI_target_item", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var organizer = CreateOrganizer(db, ytMock);
+
+        // Act
+        await organizer.Invoking(o => o.MoveVideoAsync(1, 1, 2))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Rolled back target addition*");
+
+        // Assert
+        ytMock.Verify(y => y.RemoveVideoFromPlaylistAsync("PLtarget", "PLI_target_item", It.IsAny<CancellationToken>()), Times.Once);
+
+        var sourcePv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 1 && pv.VideoId == 1);
+        sourcePv.Should().NotBeNull();
+
+        var targetPv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 2 && pv.VideoId == 1);
+        targetPv.Should().BeNull();
+
+        (await db.UndoLogs.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Test_MoveVideo_WhenSourceRemovalAndRollbackFail_ThrowsManualInterventionRequiredException()
+    {
+        // Arrange
+        using var db = CreateDb();
+        SeedBasicData(db);
+        var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "vid001", 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("PLI_target_item");
+        ytMock.Setup(y => y.RemoveVideoFromPlaylistAsync("PLsource", "PLI_source_item", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("source remove failed"));
+        ytMock.Setup(y => y.RemoveVideoFromPlaylistAsync("PLtarget", "PLI_target_item", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("rollback failed"));
+        var organizer = CreateOrganizer(db, ytMock);
+
+        // Act
+        await organizer.Invoking(o => o.MoveVideoAsync(1, 1, 2))
+            .Should().ThrowAsync<ManualInterventionRequiredException>()
+            .WithMessage("*Manual cleanup is required*");
+
+        // Assert
+        var sourcePv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 1 && pv.VideoId == 1);
+        sourcePv.Should().NotBeNull();
+
+        var targetPv = await db.PlaylistVideos.FirstOrDefaultAsync(pv => pv.PlaylistId == 2 && pv.VideoId == 1);
+        targetPv.Should().BeNull();
+
+        (await db.UndoLogs.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -152,6 +219,7 @@ public class PlaylistOrganizerTests
             Action = "Move",
             SourcePlaylistId = 1,
             TargetPlaylistId = 2,
+            PlaylistItemId = "PLI_target_item",
             PerformedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(7),
             Undone = false
@@ -160,14 +228,16 @@ public class PlaylistOrganizerTests
         await db.SaveChangesAsync();
 
         var ytMock = new Mock<IYouTubeApiClient>();
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLsource", "vid001", 0, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("PLI_source_restored");
         var organizer = CreateOrganizer(db, ytMock);
 
         // Act
         await organizer.UndoMoveAsync(undoLog.Id);
 
         // Assert
-        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLsource", "vid001", It.IsAny<CancellationToken>()), Times.Once);
-        ytMock.Verify(y => y.RemoveVideoFromPlaylistAsync("PLtarget", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        ytMock.Verify(y => y.AddVideoToPlaylistAsync("PLsource", "vid001", 0, It.IsAny<CancellationToken>()), Times.Once);
+        ytMock.Verify(y => y.RemoveVideoFromPlaylistAsync("PLtarget", "PLI_target_item", It.IsAny<CancellationToken>()), Times.Once);
 
         var log = await db.UndoLogs.FindAsync(undoLog.Id);
         log!.Undone.Should().BeTrue();

@@ -341,4 +341,95 @@ public class OrganizePlannerServiceTests
         plan.Items[0].Action.Should().Be("move");
         plan.Items[0].Confidence.Should().BeApproximately(0.70f, 0.001f);
     }
+
+    [Fact]
+    public async Task Test_BuildPlan_WhenMultipleTopicsQualify_ChoosesSingleWinningTopic()
+    {
+        using var db = CreateDb();
+        var now = DateTime.UtcNow;
+
+        var inbox = new Playlist
+        {
+            Id = 1,
+            YouTubeId = "PLinbox",
+            Name = "Incoming",
+            IsInbox = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+        var aiTag = new Tag
+        {
+            Id = 10,
+            Name = "AI Agents",
+            Slug = "ai-agents",
+            CreatedAt = now
+        };
+        var mlTag = new Tag
+        {
+            Id = 11,
+            Name = "Machine Learning",
+            Slug = "machine-learning",
+            CreatedAt = now
+        };
+        var video = new Video
+        {
+            Id = 100,
+            YouTubeId = "vid001",
+            Title = "Agentic ML Systems",
+            Description = "desc",
+            ChannelName = "Channel",
+            ChannelId = "UC1",
+            ThumbnailUrl = "https://example.com/thumb.jpg",
+            Duration = TimeSpan.FromMinutes(10),
+            PublishedAt = now,
+            Status = VideoStatus.Active,
+            CreatedAt = now,
+            UpdatedAt = now,
+            SyncedAt = now
+        };
+
+        db.Playlists.Add(inbox);
+        db.Tags.AddRange(aiTag, mlTag);
+        db.Videos.Add(video);
+        db.PlaylistVideos.Add(new PlaylistVideo
+        {
+            PlaylistId = inbox.Id,
+            VideoId = video.Id,
+            Position = 0,
+            AddedAt = now,
+            PlaylistItemId = "pli-inbox"
+        });
+        db.VideoTags.AddRange(
+            new VideoTag
+            {
+                VideoId = video.Id,
+                TagId = aiTag.Id,
+                Source = TagSource.Ollama,
+                Confidence = 0.93f,
+                CreatedAt = now
+            },
+            new VideoTag
+            {
+                VideoId = video.Id,
+                TagId = mlTag.Id,
+                Source = TagSource.Ollama,
+                Confidence = 0.81f,
+                CreatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db, new CategorizationOptions { AutoFileConfidence = 0.70f });
+
+        var plan = await service.BuildPlanAsync();
+
+        plan.Items.Should().HaveCount(2);
+        plan.Items[0].Action.Should().Be("create_playlist");
+        plan.Items[0].TargetPlaylistName.Should().Be("AI Agents");
+        plan.Items[1].Action.Should().Be("move");
+        plan.Items[1].Topic.Should().Be("AI Agents");
+        plan.Items[1].TargetPlaylistName.Should().Be("AI Agents");
+        plan.Items[1].Reason.Should().Contain("single topic");
+        plan.Items.Should().NotContain(item => item.TargetPlaylistName == "Machine Learning");
+    }
 }

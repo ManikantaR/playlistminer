@@ -56,7 +56,7 @@ test.describe('Settings page', () => {
     await page.goto('/settings');
 
     await expect(page.getByText('Current inbox')).toBeVisible();
-    await expect(page.getByText('Incoming Playlist')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Incoming Playlist' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Incoming playlist' })).toHaveValue('2');
 
     await page.getByRole('button', { name: 'Set as Incoming' }).click();

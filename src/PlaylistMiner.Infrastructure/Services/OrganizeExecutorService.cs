@@ -1,0 +1,266 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using PlaylistMiner.Core.DTOs;
+using PlaylistMiner.Core.Exceptions;
+using PlaylistMiner.Core.Interfaces;
+using PlaylistMiner.Infrastructure.Data;
+
+namespace PlaylistMiner.Infrastructure.Services;
+
+public sealed class OrganizeExecutorService(
+    PlaylistMinerDbContext db,
+    IOrganizePlannerService planner,
+    IPlaylistOrganizer playlistOrganizer,
+    IOperationsObservabilityService operationsObservabilityService,
+    IPipelineRunTracker tracker,
+    IConfiguration configuration,
+    ILogger<OrganizeExecutorService> logger) : IOrganizeExecutorService
+{
+    private const int DefaultBatchSize = 20;
+
+    public async Task<OrganizeExecutionResultDto> ExecuteAsync(CancellationToken ct = default)
+    {
+        var plan = await planner.BuildPlanAsync(ct);
+        var moveItems = plan.Items
+            .Where(item => string.Equals(item.Action, "move", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (moveItems.Count == 0)
+        {
+            return new OrganizeExecutionResultDto(plan.VideosExamined, 0, 0, 0, 0, [], null);
+        }
+
+        var quota = await operationsObservabilityService.GetMoveBudgetAsync(ct);
+        if (quota.IsBlocked || quota.UnitsRemaining <= 0)
+        {
+            return new OrganizeExecutionResultDto(
+                plan.VideosExamined,
+                0,
+                0,
+                0,
+                moveItems.Count,
+                [quota.Message],
+                null);
+        }
+
+        var batchSize = Math.Max(1, configuration.GetValue<int?>("Organize:ExecutionBatchSize") ?? DefaultBatchSize);
+        var executableCount = Math.Min(moveItems.Count, Math.Min(batchSize, quota.UnitsRemaining));
+        var executableMoves = moveItems.Take(executableCount).ToList();
+        var deferredCount = moveItems.Count - executableMoves.Count;
+        var runId = await tracker.StartRunAsync("organize-execute", ct);
+        var errors = new List<string>();
+        var executed = 0;
+        var skipped = 0;
+        var processedVideoIds = new HashSet<int>();
+
+        try
+        {
+            await tracker.UpdateRunAsync(
+                runId,
+                run =>
+                {
+                    run.VideosPendingTagging = executableMoves.Count;
+                    run.VideosDeferred = deferredCount;
+                },
+                phase: "executing",
+                message: "Executing organize batch...",
+                ct: ct);
+
+            var inbox = await db.Playlists
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.IsInbox, ct);
+
+            if (inbox is null)
+            {
+                const string missingInbox = "No inbox playlist is configured. Cannot execute organize batch.";
+                errors.Add(missingInbox);
+                await tracker.FailRunAsync(runId, missingInbox, ct: ct);
+                return new OrganizeExecutionResultDto(plan.VideosExamined, executableMoves.Count, 0, 0, moveItems.Count, errors, runId);
+            }
+
+            for (var index = 0; index < executableMoves.Count; index++)
+            {
+                var item = executableMoves[index];
+
+                try
+                {
+                    var videoId = item.VideoId ?? throw new InvalidOperationException("Move item is missing a video id.");
+                    var targetPlaylistId = item.TargetPlaylistId
+                        ?? (await playlistOrganizer.EnsureManagedPlaylistAsync(item.Topic ?? item.TargetPlaylistName ?? throw new InvalidOperationException("Move item is missing a topic."), ct)).Id;
+
+                    if (!processedVideoIds.Add(videoId))
+                    {
+                        skipped = await SkipMoveAsync(
+                            runId,
+                            skipped,
+                            item,
+                            "Skipping duplicate organize move for the same video within this batch.",
+                            deferredCount,
+                            executed,
+                            ct);
+                        continue;
+                    }
+
+                    var validation = await ValidateMoveAsync(videoId, inbox.Id, targetPlaylistId, ct);
+                    if (!validation.CanExecute)
+                    {
+                        skipped = await SkipMoveAsync(
+                            runId,
+                            skipped,
+                            item,
+                            validation.Message,
+                            deferredCount,
+                            executed,
+                            ct);
+                        continue;
+                    }
+
+                    await playlistOrganizer.MoveVideoAsync(videoId, inbox.Id, targetPlaylistId, ct);
+                    executed++;
+
+                    await tracker.UpdateRunAsync(
+                        runId,
+                        run =>
+                        {
+                            run.VideosProcessed = executed;
+                            run.VideosSkipped = skipped;
+                            run.VideosDeferred = deferredCount;
+                        },
+                        message: $"Moved \"{item.Title}\" to \"{item.TargetPlaylistName ?? item.Topic}\".",
+                        ct: ct);
+                }
+                catch (QuotaExhaustedException)
+                {
+                    var remaining = executableMoves.Count - index;
+                    deferredCount += remaining;
+                    const string quotaMessage = "YouTube API quota exhausted during organize execution. Deferred remaining moves.";
+                    errors.Add(quotaMessage);
+
+                    await tracker.DeferRunAsync(runId, quotaMessage, run =>
+                    {
+                        run.VideosProcessed = executed;
+                        run.VideosSkipped = skipped;
+                        run.VideosDeferred = deferredCount;
+                        run.ErrorsCount = errors.Count;
+                    }, ct);
+
+                    return new OrganizeExecutionResultDto(plan.VideosExamined, executableMoves.Count, executed, skipped, deferredCount, errors, runId);
+                }
+                catch (ManualInterventionRequiredException ex)
+                {
+                    var remaining = executableMoves.Count - index;
+                    deferredCount += remaining;
+                    errors.Add(ex.Message);
+
+                    await tracker.LogEventAsync(
+                        runId,
+                        "error",
+                        "manual_intervention_required",
+                        ex.Message,
+                        ct: ct);
+
+                    await tracker.FailRunAsync(runId, ex.Message, run =>
+                    {
+                        run.VideosProcessed = executed;
+                        run.VideosSkipped = skipped;
+                        run.VideosDeferred = deferredCount;
+                        run.ErrorsCount = errors.Count;
+                    }, ct);
+
+                    return new OrganizeExecutionResultDto(plan.VideosExamined, executableMoves.Count, executed, skipped, deferredCount, errors, runId);
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    errors.Add(ex.Message);
+                    logger.LogWarning(ex, "Organize execution skipped video {VideoId}.", item.VideoId);
+
+                    await tracker.LogEventAsync(
+                        runId,
+                        "warning",
+                        "executing",
+                        $"Skipping move for video {item.YouTubeId ?? item.VideoId?.ToString()}: {ex.Message}",
+                        ct: ct);
+                }
+            }
+
+            await tracker.CompleteRunAsync(runId, run =>
+            {
+                run.VideosProcessed = executed;
+                run.VideosSkipped = skipped;
+                run.VideosDeferred = deferredCount;
+                run.ErrorsCount = errors.Count;
+            }, ct);
+
+            return new OrganizeExecutionResultDto(plan.VideosExamined, executableMoves.Count, executed, skipped, deferredCount, errors, runId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Organize execution failed.");
+            await tracker.FailRunAsync(runId, ex.Message, run =>
+            {
+                run.VideosProcessed = executed;
+                run.VideosSkipped = skipped;
+                run.VideosDeferred = deferredCount;
+                run.ErrorsCount = errors.Count + 1;
+            }, ct);
+            throw;
+        }
+    }
+
+    private async Task<(bool CanExecute, string Message)> ValidateMoveAsync(
+        int videoId,
+        int inboxPlaylistId,
+        int targetPlaylistId,
+        CancellationToken ct)
+    {
+        var currentPlacement = await db.PlaylistVideos
+            .AsNoTracking()
+            .Where(pv => pv.VideoId == videoId)
+            .Select(pv => new { pv.PlaylistId, PlaylistName = pv.Playlist.Name })
+            .FirstOrDefaultAsync(ct);
+
+        if (currentPlacement is null)
+        {
+            return (false, "Video no longer has a local playlist placement.");
+        }
+
+        if (currentPlacement.PlaylistId == targetPlaylistId)
+        {
+            return (false, "Video is already filed in the target playlist.");
+        }
+
+        if (currentPlacement.PlaylistId != inboxPlaylistId)
+        {
+            return (false, $"Video no longer belongs to the inbox playlist; current playlist is \"{currentPlacement.PlaylistName}\".");
+        }
+
+        return (true, string.Empty);
+    }
+
+    private async Task<int> SkipMoveAsync(
+        string runId,
+        int skipped,
+        OrganizePlanItemDto item,
+        string reason,
+        int deferredCount,
+        int executed,
+        CancellationToken ct)
+    {
+        skipped++;
+
+        await tracker.UpdateRunAsync(
+            runId,
+            run =>
+            {
+                run.VideosProcessed = executed;
+                run.VideosSkipped = skipped;
+                run.VideosDeferred = deferredCount;
+            },
+            message: $"Skipped \"{item.Title}\": {reason}",
+            ct: ct);
+
+        return skipped;
+    }
+}

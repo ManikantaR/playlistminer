@@ -30,6 +30,7 @@ builder.Services.AddQuartz(q =>
     AddJob<SyncJob>("0 0 2 * * ?", "SyncCron", "sync-job");
     AddJob<InboxProcessingJob>("0 0 */6 * * ?", "InboxCron", "inbox-job");
     AddJob<CategorizationJob>("0 30 2 * * ?", "CategorizationCron", "categorization-job");
+    AddJob<OrganizeExecutionJob>("0 */15 * * * ?", "OrganizeCron", "organize-job");
     AddJob<UndoCleanupJob>("0 0 3 * * ?", "CleanupCron", "cleanup-job");
     AddJob<BackupJob>("0 0 4 * * ?", "BackupCron", "backup-job");
 });
