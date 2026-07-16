@@ -8,10 +8,10 @@
     <RootNamespace>$(MSBuildProjectName.Replace("-", "_"))</RootNamespace>
   </PropertyGroup>
 
-  <!-- Force MessagePack to patched version to resolve known CVEs pulled in transitively by Aspire.
-       Aspire 13.x pulls MessagePack 2.5.192 which has multiple known vulnerabilities.
-       Override to 3.1.7 which resolves all known CVEs as of June 2026. -->
+  <!-- Force patched dependency versions to resolve known CVEs pulled in transitively by Aspire
+       and ASP.NET OpenAPI packages. -->
   <ItemGroup>
     <PackageReference Include="MessagePack" Version="3.1.7" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 </Project>
