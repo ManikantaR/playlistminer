@@ -2,6 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+COPY ["Directory.Build.props", "."]
 COPY ["src/PlaylistMiner.Worker/PlaylistMiner.Worker.csproj", "src/PlaylistMiner.Worker/"]
 COPY ["src/PlaylistMiner.Core/PlaylistMiner.Core.csproj", "src/PlaylistMiner.Core/"]
 COPY ["src/PlaylistMiner.Infrastructure/PlaylistMiner.Infrastructure.csproj", "src/PlaylistMiner.Infrastructure/"]
