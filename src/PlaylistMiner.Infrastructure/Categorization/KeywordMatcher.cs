@@ -8,6 +8,8 @@ using System.Text.RegularExpressions;
 
 public class KeywordMatcher(ITagRuleRepository ruleRepository, IOptions<CategorizationOptions> options) : IKeywordMatcher
 {
+    private const float BothFieldDescriptionOnlyMultiplier = 0.5f;
+
     public async Task<List<TagSuggestion>> MatchAsync(VideoContext video, CancellationToken ct = default)
     {
         var rules = await ruleRepository.GetAllActiveRulesAsync(ct);
@@ -25,10 +27,11 @@ public class KeywordMatcher(ITagRuleRepository ruleRepository, IOptions<Categori
             if (!matchesTitle && !matchesDesc)
                 continue;
 
+            var contribution = GetContribution(rule, matchesTitle, matchesDesc);
             if (aggregated.TryGetValue(rule.TagId, out var existing))
-                aggregated[rule.TagId] = (existing.TagName, Math.Min(1.0f, existing.Weight + rule.Weight));
+                aggregated[rule.TagId] = (existing.TagName, Math.Min(1.0f, existing.Weight + contribution));
             else
-                aggregated[rule.TagId] = (rule.Tag.Name, rule.Weight);
+                aggregated[rule.TagId] = (rule.Tag.Name, contribution);
         }
 
         return [..aggregated
@@ -46,5 +49,15 @@ public class KeywordMatcher(ITagRuleRepository ruleRepository, IOptions<Categori
 
         var pattern = $@"(?<![A-Za-z0-9]){Regex.Escape(normalizedKeyword)}(?![A-Za-z0-9])";
         return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static float GetContribution(TagRule rule, bool matchesTitle, bool matchesDesc)
+    {
+        if (rule.Field is TagRuleField.Both && !matchesTitle && matchesDesc)
+        {
+            return rule.Weight * BothFieldDescriptionOnlyMultiplier;
+        }
+
+        return rule.Weight;
     }
 }
