@@ -149,6 +149,71 @@ public class KeywordMatcherTests
     }
 
     [Fact]
+    public async Task Test_Match_BothFieldDescriptionOnly_UsesWeakEvidence()
+    {
+        // Arrange
+        var tag = MakeTag(1, "GitHub");
+        var rule1 = MakeRule(1, "github", TagRuleField.Both, 0.5f, tag);
+        var rule2 = new TagRule
+        {
+            Id = 200,
+            TagId = 1,
+            Keyword = "pull request",
+            Field = TagRuleField.Both,
+            Weight = 0.5f,
+            Tag = tag,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var repoMock = new Mock<ITagRuleRepository>();
+        repoMock.Setup(r => r.GetAllActiveRulesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync([rule1, rule2]);
+
+        var matcher = new KeywordMatcher(repoMock.Object, DefaultOptions(0.7f));
+        var video = new VideoContext(
+            "Self-Improving AI Agents",
+            "Slides, GitHub links, and pull request examples are listed below.");
+
+        // Act
+        var result = await matcher.MatchAsync(video);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Test_Match_BothField_TitleAndDescription_AggregatesWeakDescriptionEvidence()
+    {
+        // Arrange
+        var tag = MakeTag(1, "React");
+        var rule1 = MakeRule(1, "react", TagRuleField.Both, 0.5f, tag);
+        var rule2 = new TagRule
+        {
+            Id = 200,
+            TagId = 1,
+            Keyword = "hooks",
+            Field = TagRuleField.Both,
+            Weight = 0.5f,
+            Tag = tag,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var repoMock = new Mock<ITagRuleRepository>();
+        repoMock.Setup(r => r.GetAllActiveRulesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync([rule1, rule2]);
+
+        var matcher = new KeywordMatcher(repoMock.Object, DefaultOptions(0.7f));
+        var video = new VideoContext("Learn React", "This lesson covers hooks in depth.");
+
+        // Act
+        var result = await matcher.MatchAsync(video);
+
+        // Assert
+        result.Should().ContainSingle();
+        result[0].Confidence.Should().BeApproximately(0.75f, 0.001f);
+    }
+
+    [Fact]
     public async Task Test_Match_FieldFilter_TitleOnly_IgnoresDescription()
     {
         // Arrange
@@ -327,7 +392,7 @@ public class KeywordMatcherTests
         var tagMachineLearning = MakeTag(4, "Machine Learning");
         var repoMock = new Mock<ITagRuleRepository>();
         repoMock.Setup(r => r.GetAllActiveRulesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([MakeRule(4, "machine learning", TagRuleField.Both, 0.8f, tagMachineLearning)]);
+            .ReturnsAsync([MakeRule(4, "machine learning", TagRuleField.Description, 0.8f, tagMachineLearning)]);
 
         var matcher = new KeywordMatcher(repoMock.Object, DefaultOptions());
         var video = new VideoContext("AI evals explained", "Practical machine learning evaluation workflow");
