@@ -269,4 +269,73 @@ public class KeywordMatcherTests
         result.Should().Contain(s => s.TagId == 1);
         result.Should().Contain(s => s.TagId == 2);
     }
+
+    [Fact]
+    public async Task Test_Match_ShortKeyword_DoesNotMatchInsideLongerWords()
+    {
+        // Arrange
+        var tagAngular = MakeTag(1, "Angular");
+        var tagTypeScript = MakeTag(2, "TypeScript");
+        var tagPython = MakeTag(3, "Python");
+        var tagMachineLearning = MakeTag(4, "Machine Learning");
+        var tagGit = MakeTag(5, "Git");
+        var repoMock = new Mock<ITagRuleRepository>();
+        repoMock.Setup(r => r.GetAllActiveRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                MakeRule(1, "ng", TagRuleField.Both, 0.8f, tagAngular),
+                MakeRule(2, "ts", TagRuleField.Both, 0.8f, tagTypeScript),
+                MakeRule(3, "py", TagRuleField.Both, 0.8f, tagPython),
+                MakeRule(4, "ml", TagRuleField.Both, 0.8f, tagMachineLearning),
+                MakeRule(5, "git", TagRuleField.Both, 0.8f, tagGit)
+            ]);
+
+        var matcher = new KeywordMatcher(repoMock.Object, DefaultOptions());
+        var video = new VideoContext(
+            "Agentic AI Explained: The Complete Guide",
+            "Self-improving agents evaluate prompt harnesses without mentioning specific languages.");
+
+        // Act
+        var result = await matcher.MatchAsync(video);
+
+        // Assert
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Test_Match_ShortKeyword_MatchesWholeToken()
+    {
+        // Arrange
+        var tagTypeScript = MakeTag(2, "TypeScript");
+        var repoMock = new Mock<ITagRuleRepository>();
+        repoMock.Setup(r => r.GetAllActiveRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([MakeRule(2, "ts", TagRuleField.Both, 0.8f, tagTypeScript)]);
+
+        var matcher = new KeywordMatcher(repoMock.Object, DefaultOptions());
+        var video = new VideoContext("TS compiler deep dive", "Type checking internals");
+
+        // Act
+        var result = await matcher.MatchAsync(video);
+
+        // Assert
+        result.Should().ContainSingle(s => s.TagId == 2);
+    }
+
+    [Fact]
+    public async Task Test_Match_PhraseKeyword_RequiresPhraseBoundary()
+    {
+        // Arrange
+        var tagMachineLearning = MakeTag(4, "Machine Learning");
+        var repoMock = new Mock<ITagRuleRepository>();
+        repoMock.Setup(r => r.GetAllActiveRulesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync([MakeRule(4, "machine learning", TagRuleField.Both, 0.8f, tagMachineLearning)]);
+
+        var matcher = new KeywordMatcher(repoMock.Object, DefaultOptions());
+        var video = new VideoContext("AI evals explained", "Practical machine learning evaluation workflow");
+
+        // Act
+        var result = await matcher.MatchAsync(video);
+
+        // Assert
+        result.Should().ContainSingle(s => s.TagId == 4);
+    }
 }

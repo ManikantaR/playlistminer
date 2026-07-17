@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using PlaylistMiner.Core.Categorization;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
+using System.Text.RegularExpressions;
 
 public class KeywordMatcher(ITagRuleRepository ruleRepository, IOptions<CategorizationOptions> options) : IKeywordMatcher
 {
@@ -17,9 +18,9 @@ public class KeywordMatcher(ITagRuleRepository ruleRepository, IOptions<Categori
         foreach (var rule in rules)
         {
             var matchesTitle = rule.Field is TagRuleField.Title or TagRuleField.Both
-                && video.Title.Contains(rule.Keyword, StringComparison.OrdinalIgnoreCase);
+                && ContainsKeyword(video.Title, rule.Keyword);
             var matchesDesc = rule.Field is TagRuleField.Description or TagRuleField.Both
-                && video.Description.Contains(rule.Keyword, StringComparison.OrdinalIgnoreCase);
+                && ContainsKeyword(video.Description, rule.Keyword);
 
             if (!matchesTitle && !matchesDesc)
                 continue;
@@ -33,5 +34,17 @@ public class KeywordMatcher(ITagRuleRepository ruleRepository, IOptions<Categori
         return [..aggregated
             .Where(kv => kv.Value.Weight >= threshold)
             .Select(kv => new TagSuggestion(kv.Key, kv.Value.TagName, kv.Value.Weight, TagSource.RuleBased))];
+    }
+
+    private static bool ContainsKeyword(string text, string keyword)
+    {
+        var normalizedKeyword = keyword.Trim();
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(normalizedKeyword))
+        {
+            return false;
+        }
+
+        var pattern = $@"(?<![A-Za-z0-9]){Regex.Escape(normalizedKeyword)}(?![A-Za-z0-9])";
+        return Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 }
