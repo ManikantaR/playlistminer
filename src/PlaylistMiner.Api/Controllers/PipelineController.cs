@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Models;
 using Microsoft.Extensions.Configuration;
@@ -22,7 +23,9 @@ public class PipelineController(
     IQuotaTracker quotaTracker,
     IOllamaCategorizer ollamaCategorizer,
     IPipelineRunTracker pipelineRunTracker,
-    IConfiguration configuration) : ControllerBase
+    IConfiguration configuration,
+    IServiceScopeFactory scopeFactory,
+    ILogger<PipelineController> logger) : ControllerBase
 {
     [HttpGet("health")]
     [ProducesResponseType<DependencyHealthDto>(StatusCodes.Status200OK)]
@@ -84,6 +87,30 @@ public class PipelineController(
         var dtos = runs.Select(r => MapToDto(r, stallThreshold)).ToList();
 
         return Ok(dtos);
+    }
+
+    [HttpPost("reclassify-generated")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    public IActionResult ReclassifyGenerated(CancellationToken ct = default)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
+                var pipeline = scope.ServiceProvider.GetRequiredService<ICategorizationPipeline>();
+
+                await backupService.TriggerBackupAsync(CancellationToken.None);
+                await pipeline.ReclassifyGeneratedAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Background generated-tag reclassification failed.");
+            }
+        }, ct);
+
+        return Accepted(new { message = "Generated-tag reclassification triggered. A database backup will run first." });
     }
 
     [HttpGet("history/{runId}")]

@@ -11,7 +11,8 @@ import {
   usePipelineHistory,
   usePipelineEvents,
   usePipelineHealth,
-  useOperationsHealth
+  useOperationsHealth,
+  useReclassifyGeneratedTags
 } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
@@ -24,6 +25,7 @@ const mockUsePipelineHistory = usePipelineHistory as jest.MockedFunction<typeof 
 const mockUsePipelineEvents = usePipelineEvents as jest.MockedFunction<typeof usePipelineEvents>;
 const mockUsePipelineHealth = usePipelineHealth as jest.MockedFunction<typeof usePipelineHealth>;
 const mockUseOperationsHealth = useOperationsHealth as jest.MockedFunction<typeof useOperationsHealth>;
+const mockUseReclassifyGeneratedTags = useReclassifyGeneratedTags as jest.MockedFunction<typeof useReclassifyGeneratedTags>;
 const mockUseDuplicateReview = useDuplicateReview as jest.MockedFunction<typeof useDuplicateReview>;
 const mockUseBuildRemoteCleanupPlan = useBuildRemoteCleanupPlan as jest.MockedFunction<typeof useBuildRemoteCleanupPlan>;
 const mockUseExecuteRemoteCleanup = useExecuteRemoteCleanup as jest.MockedFunction<typeof useExecuteRemoteCleanup>;
@@ -242,6 +244,11 @@ describe('OperationsPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseOperationsHealth.mockReturnValue(makeQueryResult(sampleOperationsHealth));
+    mockUseReclassifyGeneratedTags.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useReclassifyGeneratedTags>);
     mockUseOperationsQuota.mockReturnValue(makeQueryResult(sampleOperationsQuota));
     mockUseOperationsActivity.mockReturnValue(makeQueryResult(sampleActivityFeed));
     mockUseDuplicateReview.mockReturnValue(makeQueryResult([]));
@@ -282,6 +289,20 @@ describe('OperationsPage', () => {
     expect(screen.getByText(/34 \/ 80/)).toBeInTheDocument();
     expect(screen.getByText('Organize Activity')).toBeInTheDocument();
     expect(screen.getAllByText('Removed duplicate video from playlist "Inbox".').length).toBeGreaterThan(0);
+  });
+
+  it('opens generated-tag reclassification confirmation', () => {
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+
+    render(<OperationsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /reclassify tags/i }));
+
+    expect(screen.getByText('Reclassify Generated Tags')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /start reclassify/i })).toBeInTheDocument();
   });
 
   it('renders neutral loading copy while move budget is still loading', () => {

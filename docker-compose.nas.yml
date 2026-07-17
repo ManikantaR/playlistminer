@@ -58,6 +58,9 @@ services:
       # Real HTTPS domain — OAuth completes directly on the NAS (browser resolves via AdGuard).
       # This exact URI must be registered in Google Console as an Authorized redirect URI.
       YouTube__RedirectUri: https://playlistminer.home.manikantar.com/api/oauth/callback
+      # API health reports Ollama reachability; keep it aligned with the worker.
+      Categorization__OllamaBaseUrl: ${MAC_OLLAMA_URL:-http://host.docker.internal:11434}
+      Categorization__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
     depends_on:
       pm-db:
         condition: service_healthy
@@ -97,7 +100,7 @@ services:
       # Inference runs on the Mac. Set MAC_OLLAMA_URL in .env → http://<mac-lan-ip>:11434
       # (Ollama must bind 0.0.0.0 on the Mac: launchctl setenv OLLAMA_HOST 0.0.0.0)
       Categorization__OllamaBaseUrl: ${MAC_OLLAMA_URL:-http://host.docker.internal:11434}
-      Categorization__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:7b}
+      Categorization__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
     volumes:
       - /volume1/docker/playlistminer/backup:/app/backups
       - /volume1/docker/playlistminer/concepts:/app/concepts

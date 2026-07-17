@@ -152,6 +152,75 @@ public class CategorizationPipeline(
         }
     }
 
+    public async Task ReclassifyGeneratedAsync(CancellationToken ct = default)
+    {
+        var runId = await tracker.StartRunAsync("reclassification", ct);
+
+        try
+        {
+            await tracker.UpdateRunAsync(runId, _ => { }, phase: "loading_candidates", message: "Loading active videos for generated-tag rebuild...", ct: ct);
+
+            var activeVideoIds = await db.Videos
+                .Where(v => v.Status == VideoStatus.Active)
+                .Select(v => v.Id)
+                .ToListAsync(ct);
+
+            var manualVideoIds = await db.VideoTags
+                .Where(vt => activeVideoIds.Contains(vt.VideoId) && vt.Source == TagSource.Manual)
+                .Select(vt => vt.VideoId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var manualVideoIdSet = manualVideoIds.ToHashSet();
+            var candidateIds = activeVideoIds
+                .Where(id => !manualVideoIdSet.Contains(id))
+                .ToList();
+
+            await tracker.UpdateRunAsync(runId, r =>
+            {
+                r.VideosPendingTagging = candidateIds.Count;
+                r.VideosSkipped = manualVideoIds.Count;
+            }, phase: "clearing_generated_tags", message: "Clearing generated tag suggestions while preserving manual tags...", ct: ct);
+
+            var generatedTags = await db.VideoTags
+                .Where(vt => activeVideoIds.Contains(vt.VideoId) && vt.Source != TagSource.Manual)
+                .ToListAsync(ct);
+
+            if (generatedTags.Count > 0)
+            {
+                db.VideoTags.RemoveRange(generatedTags);
+                await db.SaveChangesAsync(ct);
+            }
+
+            await tracker.UpdateRunAsync(runId, _ => { }, phase: "reclassifying", message: $"Reclassifying {candidateIds.Count} active videos...", ct: ct);
+
+            foreach (var videoId in candidateIds)
+            {
+                try
+                {
+                    await CategorizeAsync(videoId, runId, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to reclassify video {VideoId}", videoId);
+                    await tracker.UpdateRunAsync(runId, r =>
+                    {
+                        r.VideosProcessed++;
+                        r.ErrorsCount++;
+                    }, message: $"Error reclassifying video {videoId}: {ex.Message}", ct: ct);
+                }
+            }
+
+            await tracker.UpdateRunAsync(runId, _ => { }, phase: "finalizing", message: "Finalizing reclassification run...", ct: ct);
+            await tracker.CompleteRunAsync(runId, null, ct);
+        }
+        catch (Exception ex)
+        {
+            await tracker.FailRunAsync(runId, ex.Message, null, ct);
+            throw;
+        }
+    }
+
     private async Task<List<TagSuggestion>> ClassifyVideoAsync(Video video, string? runId, CancellationToken ct)
     {
         var context = new VideoContext(video.Title, video.Description ?? string.Empty);

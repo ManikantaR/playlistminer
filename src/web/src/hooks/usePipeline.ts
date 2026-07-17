@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '@/lib/api-client';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiGet, apiPost } from '@/lib/api-client';
 import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth } from '@/types';
 
 export function usePipelineStatus() {
@@ -81,6 +81,20 @@ export function useOperationsHealth() {
         return 3000;
       }
       return 10000;
+    },
+  });
+}
+
+export function useReclassifyGeneratedTags() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<void>('/api/pipeline/reclassify-generated'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pipelineStatus'] });
+      qc.invalidateQueries({ queryKey: ['pipelineHistory'] });
+      qc.invalidateQueries({ queryKey: ['pipelineHealth'] });
+      qc.invalidateQueries({ queryKey: ['operationsHealth'] });
+      qc.invalidateQueries({ queryKey: ['videos'] });
     },
   });
 }

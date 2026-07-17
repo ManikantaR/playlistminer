@@ -269,4 +269,116 @@ public class CategorizationPipelineTests
         result.Should().BeEmpty();
         keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task Test_ReclassifyGenerated_RemovesGeneratedTags_AndRecategorizesActiveVideosWithoutManualTags()
+    {
+        // Arrange
+        using var db = CreateDb();
+        var archivedVideo = MakeVideo(3, "Archived React");
+        archivedVideo.Status = VideoStatus.Archived;
+
+        db.Tags.AddRange(MakeTag(1, "React"), MakeTag(2, "Python"));
+        db.Videos.AddRange(
+            MakeVideo(1, "Old React"),
+            MakeVideo(2, "Manual Python"),
+            archivedVideo);
+        db.VideoTags.AddRange(
+            new VideoTag
+            {
+                VideoId = 1,
+                TagId = 2,
+                Source = TagSource.RuleBased,
+                Confidence = 1.0f,
+                CreatedAt = DateTime.UtcNow
+            },
+            new VideoTag
+            {
+                VideoId = 2,
+                TagId = 2,
+                Source = TagSource.Manual,
+                CreatedAt = DateTime.UtcNow
+            },
+            new VideoTag
+            {
+                VideoId = 2,
+                TagId = 1,
+                Source = TagSource.RuleBased,
+                Confidence = 1.0f,
+                CreatedAt = DateTime.UtcNow
+            },
+            new VideoTag
+            {
+                VideoId = 3,
+                TagId = 1,
+                Source = TagSource.RuleBased,
+                Confidence = 1.0f,
+                CreatedAt = DateTime.UtcNow
+            });
+        await db.SaveChangesAsync();
+
+        var keywordMock = new Mock<IKeywordMatcher>();
+        keywordMock.Setup(k => k.MatchAsync(
+                It.Is<VideoContext>(v => v.Title == "Old React"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TagSuggestion(1, "React", 0.8f, TagSource.RuleBased)]);
+
+        var pipeline = CreatePipeline(db, keyword: keywordMock.Object);
+
+        // Act
+        await pipeline.ReclassifyGeneratedAsync();
+
+        // Assert
+        var activeTags = await db.VideoTags
+            .Where(vt => vt.VideoId == 1 || vt.VideoId == 2)
+            .OrderBy(vt => vt.VideoId)
+            .ThenBy(vt => vt.Source)
+            .ThenBy(vt => vt.TagId)
+            .ToListAsync();
+
+        activeTags.Should().BeEquivalentTo([
+            new { VideoId = 1, TagId = 1, Source = TagSource.RuleBased },
+            new { VideoId = 2, TagId = 2, Source = TagSource.Manual }
+        ], opts => opts.ExcludingMissingMembers());
+
+        var archivedTag = await db.VideoTags.SingleAsync(vt => vt.VideoId == 3);
+        archivedTag.TagId.Should().Be(1);
+        archivedTag.Source.Should().Be(TagSource.RuleBased);
+
+        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Test_ReclassifyGenerated_RecordsPipelineRunMetrics()
+    {
+        // Arrange
+        using var db = CreateDb();
+        db.Tags.Add(MakeTag(1, "React"));
+        db.Videos.AddRange(MakeVideo(1), MakeVideo(2, "No Match"));
+        await db.SaveChangesAsync();
+
+        var keywordMock = new Mock<IKeywordMatcher>();
+        keywordMock.Setup(k => k.MatchAsync(
+                It.Is<VideoContext>(v => v.Title == "React Tutorial"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TagSuggestion(1, "React", 0.8f, TagSource.RuleBased)]);
+        keywordMock.Setup(k => k.MatchAsync(
+                It.Is<VideoContext>(v => v.Title == "No Match"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var pipeline = CreatePipeline(db, keyword: keywordMock.Object);
+
+        // Act
+        await pipeline.ReclassifyGeneratedAsync();
+
+        // Assert
+        var run = await db.PipelineRuns.SingleAsync(r => r.PipelineType == "reclassification");
+        run.Status.Should().Be("completed");
+        run.VideosPendingTagging.Should().Be(2);
+        run.VideosProcessed.Should().Be(2);
+        run.VideosTagged.Should().Be(1);
+        run.VideosSkipped.Should().Be(1);
+        run.RuleBasedHits.Should().Be(1);
+    }
 }

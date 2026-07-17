@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePipelineStatus, usePipelineHistory, usePipelineEvents, usePipelineHealth, useOperationsHealth } from '@/hooks/usePipeline';
+import {
+  usePipelineStatus,
+  usePipelineHistory,
+  usePipelineEvents,
+  usePipelineHealth,
+  useOperationsHealth,
+  useReclassifyGeneratedTags
+} from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
 import { useOperationsActivity, useOperationsQuota } from '@/hooks/useOperations';
@@ -68,6 +75,8 @@ function getPipelineDisplayName(pipelineType: string) {
       return 'Remote Cleanup';
     case 'organize-execute':
       return 'Organize Execute';
+    case 'reclassification':
+      return 'Reclassification';
     default:
       return 'Categorization Job';
   }
@@ -85,6 +94,7 @@ export default function OperationsPage() {
   const { data: history, refetch: refetchHistory } = usePipelineHistory();
   const { data: health, refetch: refetchHealth } = usePipelineHealth();
   const { data: opsHealth, refetch: refetchOpsHealth } = useOperationsHealth();
+  const reclassifyGeneratedTags = useReclassifyGeneratedTags();
   const [activityOffset, setActivityOffset] = useState(0);
   const activityLimit = 10;
   const { data: activityFeed, refetch: refetchActivity } = useOperationsActivity(activityLimit, activityOffset);
@@ -93,6 +103,7 @@ export default function OperationsPage() {
   const remoteCleanupPlan = useBuildRemoteCleanupPlan();
   const remoteCleanupExecution = useExecuteRemoteCleanup();
   const [confirmRemoteCleanupOpen, setConfirmRemoteCleanupOpen] = useState(false);
+  const [confirmReclassifyOpen, setConfirmReclassifyOpen] = useState(false);
   const [remoteCleanupBatchSize, setRemoteCleanupBatchSize] = useState(DEFAULT_REMOTE_CLEANUP_BATCH_SIZE);
 
   // If there's an active run, we fetch events for it. Otherwise, we fetch events for the latest run.
@@ -173,6 +184,12 @@ export default function OperationsPage() {
     if (limitedPlan.length === 0) return;
     setConfirmRemoteCleanupOpen(false);
     await remoteCleanupExecution.mutateAsync(limitedPlan);
+  };
+
+  const executeReclassify = async () => {
+    setConfirmReclassifyOpen(false);
+    await reclassifyGeneratedTags.mutateAsync();
+    handleManualRefresh();
   };
 
   const hasUnresolvedRemoteCleanupItems = !!remoteCleanupPlan.data?.some(item => item.hasUnresolvedRemovals);
@@ -314,10 +331,20 @@ export default function OperationsPage() {
           <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           <h1 className="text-2xl font-bold">System Operations</h1>
         </div>
-        <Button onClick={handleManualRefresh} variant="secondary">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setConfirmReclassifyOpen(true)}
+            variant="secondary"
+            disabled={reclassifyGeneratedTags.isPending || activeRun?.status === 'in_progress'}
+          >
+            <Database className="w-4 h-4 mr-2" />
+            Reclassify Tags
+          </Button>
+          <Button onClick={handleManualRefresh} variant="secondary">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Operations Status Banner */}
@@ -806,6 +833,26 @@ export default function OperationsPage() {
             </Button>
             <Button variant="danger" onClick={executeRemoteCleanup} disabled={remoteCleanupExecution.isPending}>
               Confirm Cleanup
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmReclassifyOpen}
+        onClose={() => setConfirmReclassifyOpen(false)}
+        title="Reclassify Generated Tags"
+      >
+        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+          <p>
+            This starts a database backup, clears generated tag suggestions, and rebuilds them from the current classifier. Manual tags are preserved.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setConfirmReclassifyOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={executeReclassify} disabled={reclassifyGeneratedTags.isPending}>
+              {reclassifyGeneratedTags.isPending ? 'Starting...' : 'Start Reclassify'}
             </Button>
           </div>
         </div>
