@@ -92,11 +92,10 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<ITagRuleRepository, TagRuleRepository>();
         services.AddScoped<IKeywordMatcher, KeywordMatcher>();
         services.AddScoped<ITfIdfScorer, TfIdfScorer>();
-        services.AddScoped<IOllamaCategorizer, OllamaCategorizer>();
         services.AddScoped<ICategorizationPipeline, CategorizationPipeline>();
         services.AddScoped<ISelfLearningService, SelfLearningService>();
 
-        services.AddHttpClient<OllamaCategorizer>("Ollama", (sp, client) =>
+        services.AddHttpClient<IOllamaCategorizer, OllamaCategorizer>((sp, client) =>
         {
             var opts = sp.GetRequiredService<IOptions<CategorizationOptions>>().Value;
             client.BaseAddress = new Uri(opts.OllamaBaseUrl);
