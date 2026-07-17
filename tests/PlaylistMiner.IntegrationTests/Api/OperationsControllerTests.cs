@@ -2,9 +2,11 @@ using System;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
@@ -33,11 +35,24 @@ public class OperationsControllerTests
         await db.SaveChangesAsync();
     }
 
+    private static PlaylistMinerWebAppFactory CreateFactoryWithOllamaReachable(bool reachable)
+    {
+        return new PlaylistMinerWebAppFactory(services =>
+        {
+            var ollamaMock = new Mock<IOllamaCategorizer>();
+            ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(reachable);
+
+            services.RemoveAll<IOllamaCategorizer>();
+            services.AddSingleton(ollamaMock.Object);
+        });
+    }
+
     [Fact]
     public async Task Test_GetHealth_Returns200_WithCorrectProperties()
     {
         // Arrange
-        using var factory = new PlaylistMinerWebAppFactory();
+        using var factory = CreateFactoryWithOllamaReachable(false);
         var client = factory.CreateClient();
 
         // Act
