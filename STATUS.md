@@ -4,7 +4,7 @@
 > changes (deploy, sync run, new bug). Pairs with [TASK.md](TASK.md) (the backlog).
 > Goal: any session — human or agent — can resume cold from this file.
 
-_Last updated: 2026-07-06_
+_Last updated: 2026-07-18_
 
 ## Deployment
 | Component | Where | State |
@@ -18,6 +18,77 @@ _Last updated: 2026-07-06_
 - URL (LAN only, AdGuard DNS): https://playlistminer.home.manikantar.com
 - Deploy: `./deploy-to-nas.sh` (tar → scp → build on NAS → `up -d --force-recreate`)
 - OAuth: ✅ connected (green). Refresh token persisted. Consent screen **In production** (tokens don't expire).
+
+## Latest live snapshot (2026-07-18)
+
+- Repo: clean on `main...origin/main`
+- Latest merged PR: `#31` — **Add playlist restore sample endpoint**
+- No open PRs at time of audit.
+- CI for PR `#31`: .NET, frontend, Playwright E2E, and CodeQL all passed.
+- NAS deploy after PR `#31`: completed; route verifier returned
+  `https://playlistminer.home.manikantar.com -> 200`.
+- Pipeline health after deploy:
+  - database healthy
+  - OAuth connected
+  - YouTube quota available
+  - Ollama reachable
+  - worker healthy
+
+## Playlist restore status (2026-07-18)
+
+The user accidentally deleted the original YouTube playlist `AI Skills` and recreated a new
+playlist named `AI skills`.
+
+Known DB playlists:
+
+- Old DB playlist id `6`
+  - name: `AI Skills`
+  - YouTube id: `PL2pbi0OI4yFX9psx-U5ZElpREYpW4q7l3`
+  - before validation restore: `1251` local video links
+- New DB playlist id `409`
+  - name: `AI skills`
+  - YouTube id: `PLW7KgJNN7b4Y`
+  - before validation restore: `66` local video links
+
+What was done:
+
+- Added a narrow restore API: `POST /api/playlists/{targetPlaylistId}/restore-sample`
+- The API uses the app's existing YouTube client/OAuth boundary. No manual token reading or
+  secret decryption is needed or acceptable.
+- Validation call restored 5 videos from old id `6` into new id `409`.
+- After validation restore:
+  - old playlist id `6`: `1251 -> 1246`
+  - new playlist id `409`: `66 -> 71`
+
+Next restore direction:
+
+- Do not run full restore interactively.
+- Convert restore into queued off-peak background job.
+- Use nightly batches, roughly `120-150` adds/night unless quota pressure says otherwise.
+- Prefer after YouTube daily quota reset at midnight Pacific Time; operational local window
+  remains `23:00-05:00`.
+- Telegram/status digest should report added count, remaining count, quota used, failures,
+  and next scheduled batch.
+
+## Inbox status (2026-07-18)
+
+The intended inbox is `myinbox` / `MyInbox`. The user reported it did not show up after
+resync from the UI.
+
+Live API verification found:
+
+- id `407`
+- YouTube id `PLH_QpnlkswM8`
+- name `myinbox`
+- `itemCount: 7`
+- `isInbox: false`
+
+Likely interpretation:
+
+- The playlist is synced into the app, so this may be a UI visibility/refresh/casing or
+  selection-state bug rather than a YouTube sync miss.
+- Next step is to verify the playlist page/settings page behavior and either mark id `407`
+  as inbox or fix why it is not visible/selectable.
 
 ## Data (as of 2026-06-29, post-fix verified)
 - Playlists: **406** synced
@@ -221,6 +292,27 @@ _Last updated: 2026-07-06_
     - planner behavior is now explicitly documented/tested as **one managed playlist per video**,
     - when multiple topics clear the threshold, organize chooses the single highest-confidence winner and defers secondary topics instead of multi-homing the video,
     - `docs/ORGANIZE-ENGINE-SPEC.md` now matches the shipped local/remote dedup direction instead of the old "up to 2 topics/video" design text.
+- Classification fixes and Ollama reclassification workflow landed July 17, 2026:
+  - PR `#27` fixed keyword boundary matching for short aliases.
+  - PR `#28` reduced description-only classification noise.
+  - PR `#29` added generated tag reclassification workflow and Operations UI action.
+  - PR `#30` fixed Ollama typed client registration.
+  - Live Ollama health later verified reachable from NAS.
+
+## Product decisions captured 2026-07-18
+
+- First week should be supervised: show high-confidence actions with checkboxes and require
+  approval before learning from the flow.
+- After trust is established, default direction is aggressive automation with undo.
+- User wants both clean playlists and a learning agent around concepts such as `AI MCP`,
+  `AI Loop Engineering`, and related AI engineering topics.
+- App should be able to create new topic playlists using AI-suggested names.
+- Ollama remains preferred, but public provider fallback is desired when Ollama is unavailable.
+- Weekly learning plan is useful and should be delivered.
+- Cleanup should recommend top delete candidates with reasons and allow approval, not delete
+  blindly.
+- Sync, restore, cleanup, and other heavy jobs should be staged for off-peak background windows.
+- User wants natural-language / semantic search.
 
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
@@ -241,6 +333,16 @@ _Last updated: 2026-07-06_
 - `workerHealthy` now also true when a run is actively progressing (was false mid-sync).
 - Remaining organize-engine gaps are narrower now: `ConsolidateAsync` is still a stub;
   Telegram digests and process-now are still unbuilt; watch-history import is still unbuilt.
+- `README.md` roadmap is stale and still shows completed Phase 1 foundations as unchecked.
+- `.github/prompts/10-phase0-bring-up.md` checklist is stale relative to live Phase 0 status.
+- `docs/roadmap/tasks.md` does not exist; active trackers are `TASK.md`, `STATUS.md`, and
+  `ROADMAP.md`.
+- Several remote branches remain after merged PRs and can be pruned after review:
+  `origin/restore-playlist-sample`, `origin/fix/ollama-typed-client-registration`,
+  `origin/feat/ollama-reclassify-workflow`, `origin/fix/classification-description-noise`,
+  `origin/fix/classification-keyword-boundaries`, `origin/issue-5-organize-executor-slice`,
+  `origin/issue-24-remote-youtube-dedup-cleanup`, `origin/feature/issue-9-inbox-selection`,
+  `origin/feat/nas-deploy-learning-agent`, and the old dependabot branch.
 
 ## How to check health fast
 ```
