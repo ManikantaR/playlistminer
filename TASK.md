@@ -13,9 +13,9 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
 
 - First week: **show high-confidence proposed actions with UI checkboxes**; user approves.
 - After confidence: **aggressive automation with undo**, Telegram digest, and audit trail.
-- Inbox source: intended to be `myinbox`. Live API currently sees playlist id `407`
-  (`PLH_QpnlkswM8`, `itemCount=7`, `isInbox=false`), so the next work is either marking it
-  inbox or fixing UI visibility/refresh.
+- Inbox source: intended to be `myinbox`. PR #43 shipped playlist search, inbox-like Settings
+  suggestions, and playlist cache refresh after manual sync so id `407` can be found and
+  selected from the UI.
 - AI provider chain: **Ollama first**, configured public AI fallback only when enabled, then
   keyword/TF-IDF fallback.
 - Heavy work should run as queued background jobs in an off-peak window (`23:00-05:00`);
@@ -25,9 +25,10 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
 
 ## Immediate next build order
 
-- [ ] #33 **Inbox reliability / `myinbox` bug** — verify why `myinbox` is not showing or not
+- [x] #33 **Inbox reliability / `myinbox` bug** — verify why `myinbox` is not showing or not
   selected as inbox after resync. Current live API shows id `407`, name `myinbox`,
-  `isInbox=false`, `itemCount=7`.
+  `isInbox=false`, `itemCount=7`. PR #43 added search, Settings suggestions, and sync cache
+  invalidation; merged and deployed on 2026-07-18.
 - [ ] #34 **Automation policy / Autopilot settings** — persisted mode (`manual`,
   `first_week_approval`, `aggressive_with_undo`), thresholds, daily budgets, public AI
   fallback policy, off-peak window, pause/resume.

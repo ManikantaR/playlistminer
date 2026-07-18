@@ -22,10 +22,10 @@ _Last updated: 2026-07-18_
 ## Latest live snapshot (2026-07-18)
 
 - Repo: clean on `main...origin/main`
-- Latest merged PR: `#31` — **Add playlist restore sample endpoint**
+- Latest merged PR: `#43` — **Improve inbox playlist discoverability**
 - No open PRs at time of audit.
-- CI for PR `#31`: .NET, frontend, Playwright E2E, and CodeQL all passed.
-- NAS deploy after PR `#31`: completed; route verifier returned
+- CI for PR `#43`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
+- NAS deploy after PR `#43`: completed; route verifier returned
   `https://playlistminer.home.manikantar.com -> 200`.
 - Pipeline health after deploy:
   - database healthy
@@ -83,12 +83,15 @@ Live API verification found:
 - `itemCount: 7`
 - `isInbox: false`
 
-Likely interpretation:
+What was fixed in PR `#43`:
 
-- The playlist is synced into the app, so this may be a UI visibility/refresh/casing or
-  selection-state bug rather than a YouTube sync miss.
-- Next step is to verify the playlist page/settings page behavior and either mark id `407`
-  as inbox or fix why it is not visible/selectable.
+- `/playlists` now has case-insensitive search across playlist name and YouTube id, so
+  `myinbox` is easy to find even with hundreds of playlists.
+- `/settings` now suggests inbox-like playlists and defaults to `myinbox` when there is no
+  current inbox selected.
+- Manual sync now invalidates the playlist query as well as sync status/history, so Settings
+  and Playlists refresh after a UI-triggered sync.
+- Issue `#33` closed automatically on merge.
 
 ## Data (as of 2026-06-29, post-fix verified)
 - Playlists: **406** synced
