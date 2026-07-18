@@ -8,12 +8,28 @@ namespace PlaylistMiner.Worker.Jobs;
 public class OrganizeExecutionJob(
     IOllamaCategorizer ollamaCategorizer,
     IOrganizeExecutorService organizeExecutorService,
+    IAutomationPolicyService automationPolicyService,
     ILogger<OrganizeExecutionJob> logger) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
     {
         try
         {
+            var policy = await automationPolicyService.GetPolicyAsync(context.CancellationToken);
+            if (policy.IsPaused)
+            {
+                logger.LogInformation("Skipping organize execution because automation is paused.");
+                return;
+            }
+
+            if (policy.Mode != "aggressive_with_undo")
+            {
+                logger.LogInformation(
+                    "Skipping organize execution because automation mode is {AutomationMode}.",
+                    policy.Mode);
+                return;
+            }
+
             if (!await ollamaCategorizer.IsAvailableAsync(context.CancellationToken))
             {
                 logger.LogInformation("Skipping organize execution because Ollama is unavailable.");

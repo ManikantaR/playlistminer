@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using PlaylistMiner.Core.DTOs;
@@ -57,7 +58,7 @@ public sealed class OperationsObservabilityService(
 
     public async Task<OperationsQuotaDto> GetMoveBudgetAsync(CancellationToken ct = default)
     {
-        var moveBudget = configuration.GetValue<int?>("Organize:DailyMoveBudget") ?? DefaultMoveBudget;
+        var moveBudget = await GetMoveBudgetLimitAsync(ct);
         var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
         var nowPacific = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, PacificTz);
         var dayStartPacific = new DateTime(nowPacific.Year, nowPacific.Month, nowPacific.Day, 0, 0, 0, DateTimeKind.Unspecified);
@@ -85,6 +86,22 @@ public sealed class OperationsObservabilityService(
             unitsRemaining,
             isBlocked,
             message);
+    }
+
+    private async Task<int> GetMoveBudgetLimitAsync(CancellationToken ct)
+    {
+        var persistedBudget = await db.Settings
+            .AsNoTracking()
+            .Where(setting => setting.Key == "automation.daily_move_budget")
+            .Select(setting => setting.Value)
+            .FirstOrDefaultAsync(ct);
+
+        if (int.TryParse(persistedBudget, CultureInfo.InvariantCulture, out var budget))
+        {
+            return budget;
+        }
+
+        return configuration.GetValue<int?>("Organize:DailyMoveBudget") ?? DefaultMoveBudget;
     }
 
     private static string GetPipelineLabel(string? pipelineType)

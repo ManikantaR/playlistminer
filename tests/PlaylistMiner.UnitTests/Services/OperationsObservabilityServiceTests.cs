@@ -169,6 +169,34 @@ public class OperationsObservabilityServiceTests
         result.ResetsAt.Should().BeAfter(now);
     }
 
+    [Fact]
+    public async Task Test_GetMoveBudgetAsync_UsesPersistedAutomationPolicyBudget()
+    {
+        // Arrange
+        using var db = CreateDb();
+        var now = new DateTime(2026, 7, 4, 15, 0, 0, DateTimeKind.Utc);
+        db.Settings.Add(new Setting
+        {
+            Key = "automation.daily_move_budget",
+            Value = "42",
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var configuration = new ConfigurationBuilder().Build();
+        var service = new OperationsObservabilityService(
+            db,
+            configuration,
+            new FakeTimeProvider(now));
+
+        // Act
+        var result = await service.GetMoveBudgetAsync();
+
+        // Assert
+        result.MoveBudget.Should().Be(42);
+        result.UnitsRemaining.Should().Be(42);
+    }
+
     private sealed class FakeTimeProvider(DateTime utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(utcNow);

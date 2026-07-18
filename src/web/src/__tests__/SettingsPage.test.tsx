@@ -5,6 +5,7 @@ import React from 'react';
 jest.mock('@/hooks/useOAuth');
 jest.mock('@/hooks/useSync');
 jest.mock('@/hooks/usePlaylists');
+jest.mock('@/hooks/useAutomationPolicy');
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -14,12 +15,15 @@ jest.mock('react-hot-toast', () => ({
 }));
 
 import SettingsPage from '@/app/settings/page';
+import { useAutomationPolicy, useUpdateAutomationPolicy } from '@/hooks/useAutomationPolicy';
 import { useConnect, useDisconnect, useOAuthStatus } from '@/hooks/useOAuth';
 import { usePlaylists, useSetInboxPlaylist } from '@/hooks/usePlaylists';
 import { useSyncStatus } from '@/hooks/useSync';
-import type { Playlist } from '@/types';
+import type { AutomationPolicy, Playlist } from '@/types';
 import toast from 'react-hot-toast';
 
+const mockUseAutomationPolicy = useAutomationPolicy as jest.MockedFunction<typeof useAutomationPolicy>;
+const mockUseUpdateAutomationPolicy = useUpdateAutomationPolicy as jest.MockedFunction<typeof useUpdateAutomationPolicy>;
 const mockUseOAuthStatus = useOAuthStatus as jest.MockedFunction<typeof useOAuthStatus>;
 const mockUseConnect = useConnect as jest.MockedFunction<typeof useConnect>;
 const mockUseDisconnect = useDisconnect as jest.MockedFunction<typeof useDisconnect>;
@@ -37,6 +41,22 @@ const makePlaylist = (overrides: Partial<Playlist> = {}): Playlist => ({
   itemCount: 12,
   ...overrides,
 });
+
+const automationPolicy: AutomationPolicy = {
+  mode: 'manual',
+  highConfidenceThreshold: 0.9,
+  reviewThreshold: 0.65,
+  dailyMoveBudget: 80,
+  nightlyRestoreBudget: 150,
+  cleanupRecommendationCount: 5,
+  offPeakWindowStart: '23:00',
+  offPeakWindowEnd: '05:00',
+  publicAiFallbackEnabled: false,
+  publicAiProvider: null,
+  publicAiModel: null,
+  transcriptCloudPolicy: 'never',
+  isPaused: false,
+};
 
 const makeQueryResult = <T,>(data: T) => ({
   data,
@@ -88,6 +108,13 @@ describe('SettingsPage', () => {
       mutate: jest.fn(),
       isPending: false,
     } as ReturnType<typeof useDisconnect>);
+    mockUseAutomationPolicy.mockReturnValue(
+      makeQueryResult(automationPolicy) as ReturnType<typeof useAutomationPolicy>,
+    );
+    mockUseUpdateAutomationPolicy.mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false,
+    } as ReturnType<typeof useUpdateAutomationPolicy>);
   });
 
   it('shows the current inbox and lets the user choose another synced playlist', async () => {
