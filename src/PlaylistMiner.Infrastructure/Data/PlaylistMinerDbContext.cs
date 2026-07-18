@@ -19,6 +19,7 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
     public DbSet<BackupLog> BackupLogs => Set<BackupLog>();
     public DbSet<PipelineRun> PipelineRuns => Set<PipelineRun>();
     public DbSet<PipelineEvent> PipelineEvents => Set<PipelineEvent>();
+    public DbSet<OperationRequest> OperationRequests => Set<OperationRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,7 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
         ConfigureBackupLog(modelBuilder);
         ConfigurePipelineRun(modelBuilder);
         ConfigurePipelineEvent(modelBuilder);
+        ConfigureOperationRequest(modelBuilder);
 
         SeedData.Apply(modelBuilder);
     }
@@ -351,6 +353,35 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
             entity.Property(e => e.PayloadJson).HasColumnName("payload_json");
 
             entity.HasIndex(e => e.RunId).HasDatabaseName("ix_pipeline_events_run_id");
+        });
+    }
+
+    private static void ConfigureOperationRequest(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<OperationRequest>(entity =>
+        {
+            entity.ToTable("operation_requests");
+            entity.HasKey(o => o.Id);
+            entity.Property(o => o.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            entity.Property(o => o.Type).HasColumnName("type").HasMaxLength(50).IsRequired();
+            entity.Property(o => o.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            entity.Property(o => o.CreatedBy).HasColumnName("created_by").HasMaxLength(100).IsRequired();
+            entity.Property(o => o.Source).HasColumnName("source").HasMaxLength(200);
+            entity.Property(o => o.Target).HasColumnName("target").HasMaxLength(200);
+            entity.Property(o => o.MaxItems).HasColumnName("max_items");
+            entity.Property(o => o.QuotaEstimate).HasColumnName("quota_estimate");
+            entity.Property(o => o.NotBefore).HasColumnName("not_before");
+            entity.Property(o => o.AllowedWindowStart).HasColumnName("allowed_window_start").HasMaxLength(5);
+            entity.Property(o => o.AllowedWindowEnd).HasColumnName("allowed_window_end").HasMaxLength(5);
+            entity.Property(o => o.RunId).HasColumnName("run_id").HasMaxLength(100);
+            entity.Property(o => o.CreatedAt).HasColumnName("created_at").IsRequired();
+            entity.Property(o => o.UpdatedAt).HasColumnName("updated_at").IsRequired();
+            entity.Property(o => o.StartedAt).HasColumnName("started_at");
+            entity.Property(o => o.CompletedAt).HasColumnName("completed_at");
+            entity.Property(o => o.Error).HasColumnName("error");
+
+            entity.HasIndex(o => o.Status).HasDatabaseName("ix_operation_requests_status");
+            entity.HasIndex(o => o.RunId).HasDatabaseName("ix_operation_requests_run_id");
         });
     }
 }

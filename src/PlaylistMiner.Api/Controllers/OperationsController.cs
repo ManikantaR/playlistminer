@@ -22,6 +22,7 @@ public class OperationsController(
     IOllamaCategorizer ollamaCategorizer,
     IPipelineRunTracker pipelineRunTracker,
     IPlaylistOrganizer playlistOrganizer,
+    IOperationQueueService operationQueueService,
     IRemoteDuplicateCleanupService remoteDuplicateCleanupService,
     IConfiguration configuration) : ControllerBase
 {
@@ -101,6 +102,84 @@ public class OperationsController(
     {
         var quota = await operationsObservabilityService.GetMoveBudgetAsync(ct);
         return Ok(quota);
+    }
+
+    [HttpGet("queue")]
+    [ProducesResponseType<List<OperationRequestDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetQueueAsync(CancellationToken ct = default)
+    {
+        var operations = await operationQueueService.ListAsync(ct);
+        return Ok(operations);
+    }
+
+    [HttpGet("queue/{id:int}")]
+    [ProducesResponseType<OperationRequestDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetQueuedOperationAsync(int id, CancellationToken ct = default)
+    {
+        var operation = await operationQueueService.GetAsync(id, ct);
+        if (operation is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Operation not found.",
+                Detail = $"Operation request {id} was not found."
+            });
+        }
+
+        return Ok(operation);
+    }
+
+    [HttpPost("queue")]
+    [ProducesResponseType<OperationRequestDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> QueueOperationAsync(
+        [FromBody] CreateOperationRequestDto request,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var operation = await operationQueueService.QueueAsync(request, "user", ct);
+            return Created($"/api/operations/queue/{operation.Id}", operation);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid operation request.",
+                Detail = ex.Message
+            });
+        }
+    }
+
+    [HttpPost("queue/{id:int}/cancel")]
+    [ProducesResponseType<OperationRequestDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelOperationAsync(int id, CancellationToken ct = default)
+    {
+        try
+        {
+            var operation = await operationQueueService.CancelAsync(id, ct);
+            if (operation is null)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Title = "Operation not found.",
+                    Detail = $"Operation request {id} was not found."
+                });
+            }
+
+            return Ok(operation);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Operation cannot be canceled.",
+                Detail = ex.Message
+            });
+        }
     }
 
     [HttpPost("duplicates/plan-remote-cleanup")]
