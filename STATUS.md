@@ -22,17 +22,33 @@ _Last updated: 2026-07-18_
 ## Latest live snapshot (2026-07-18)
 
 - Repo: clean on `main...origin/main`
-- Latest merged PR: `#45` — **Add persisted automation policy controls**
+- Latest merged PR: `#47` — **Add process-now reachability flow**
 - No open PRs at time of audit.
-- CI for PR `#45`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
-- NAS deploy after PR `#45`: completed; route verifier returned
+- CI for PR `#47`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
+- NAS deploy after PR `#47`: completed; route verifier returned
   `https://playlistminer.home.manikantar.com -> 200`.
+- Live `/api/health` after deploy returned `{"status":"healthy","db":"up"}`.
 - Pipeline health after deploy:
   - database healthy
   - OAuth connected
   - YouTube quota available
   - Ollama reachable
   - worker healthy
+
+## Process now / Ollama reachability status (2026-07-18)
+
+PR `#47` shipped the Mac/Ollama reachability control for issue `#8`:
+
+- Scheduled `InboxProcessingJob` probes Ollama before each cycle.
+- If Ollama is unreachable, the job logs a clean skip and leaves Incoming untouched for the
+  next retry instead of starting a partial sync/categorization pass.
+- `POST /api/agent/process-now` uses the same reachability gate; when reachable it runs
+  inbox sync, categorization, and the organize executor immediately.
+- `/organize` now has a **Process Now** button and displays the result message plus sync /
+  planned / executed / deferred counts when execution runs.
+- Live route and API health were verified after NAS deploy. The live `process-now` POST was
+  intentionally not called during verification because it performs real YouTube playlist
+  mutations.
 
 ## Automation policy status (2026-07-18)
 
@@ -162,6 +178,10 @@ What was fixed in PR `#43`:
   - successful moves still write 7-day undo logs through `PlaylistOrganizer.MoveVideoAsync`,
   - YouTube playlist inserts now request `position: 0` for newest-first filing,
   - the worker now has a 15-minute `OrganizeExecutionJob` that only runs when Ollama is reachable.
+- Process-now reachability issue **#8** is now on `main` (July 18, 2026):
+  - scheduled inbox processing skips cleanly when Ollama is unreachable,
+  - `POST /api/agent/process-now` drains Incoming on demand when Ollama is reachable,
+  - `/organize` exposes a Process Now button and result summary.
 - Organize dedup detection issue **#6** is superseded by shipped work already on `main`:
   - local state now enforces **one playlist per video** via the unique
     `playlist_videos.video_id` index and the cleanup migration,
