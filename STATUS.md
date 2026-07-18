@@ -22,10 +22,10 @@ _Last updated: 2026-07-18_
 ## Latest live snapshot (2026-07-18)
 
 - Repo: clean on `main...origin/main`
-- Latest merged PR: `#43` — **Improve inbox playlist discoverability**
+- Latest merged PR: `#45` — **Add persisted automation policy controls**
 - No open PRs at time of audit.
-- CI for PR `#43`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
-- NAS deploy after PR `#43`: completed; route verifier returned
+- CI for PR `#45`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
+- NAS deploy after PR `#45`: completed; route verifier returned
   `https://playlistminer.home.manikantar.com -> 200`.
 - Pipeline health after deploy:
   - database healthy
@@ -33,6 +33,25 @@ _Last updated: 2026-07-18_
   - YouTube quota available
   - Ollama reachable
   - worker healthy
+
+## Automation policy status (2026-07-18)
+
+PR `#45` shipped the persisted Autopilot control surface:
+
+- `GET /api/automation/policy` returns defaults from the existing `settings` table when no
+  saved policy exists.
+- `PUT /api/automation/policy` validates and persists mode, thresholds, move/restore budgets,
+  cleanup count, off-peak window, public AI fallback policy, transcript cloud policy, and pause.
+- `/settings` now shows Automation Policy controls plus quota remaining, pending approvals
+  placeholder, last automation run, and next off-peak run.
+- Organize planning uses the persisted high-confidence threshold.
+- Operations quota uses the persisted daily move budget.
+- The background organize job skips when automation is paused or when mode is not
+  `aggressive_with_undo`.
+- Live endpoint after deploy returned default policy:
+  mode `manual`, high-confidence threshold `0.9`, review threshold `0.65`, daily move budget `80`,
+  nightly restore budget `150`, cleanup recommendations `5`, off-peak window `23:00-05:00`,
+  public AI fallback disabled, transcript cloud policy `never`, paused `false`.
 
 ## Playlist restore status (2026-07-18)
 

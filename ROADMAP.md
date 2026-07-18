@@ -78,6 +78,11 @@ Status: shipped via PR #43 on 2026-07-18 and deployed to the NAS.
 
 Goal: make autonomy explicit and controllable.
 
+Status: shipped via PR #45 on 2026-07-18 and deployed to the NAS. The API and Settings UI
+persist policy in the existing `settings` table. Organize planning reads the persisted
+high-confidence threshold, operations quota reads the persisted daily move budget, and the
+background organize job respects pause/mode.
+
 Add persisted policy settings:
 
 - mode: `manual`, `first_week_approval`, `aggressive_with_undo`
