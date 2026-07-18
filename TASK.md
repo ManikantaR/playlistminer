@@ -34,8 +34,9 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
   fallback policy, off-peak window, pause/resume. PR #45 added the API, Settings UI,
   quota/last-run/next-run status, persisted move-budget and threshold usage, and worker
   pause/mode gating; merged and deployed on 2026-07-18.
-- [ ] **#8 Process now + reachability** — `POST /api/agent/process-now`, UI button, clean
-  Ollama-unavailable skip, optional cloud fallback.
+- [x] **#8 Process now + reachability** — `POST /api/agent/process-now`, UI button, and
+  clean Ollama-unavailable skip shipped in PR #47; merged and deployed on 2026-07-18.
+  Optional cloud fallback remains separate work in #39.
 - [ ] #35 **Background operation queue** — durable queued/scheduled/running/completed/failed
   jobs for sync, restore, cleanup, organize, reclassify, weekly synthesis.
 - [ ] #36 **Full `AI Skills` restore as a nightly job** — source old playlist id `6`, target new
@@ -79,7 +80,7 @@ Implemented by **Codex**; reviewed + merged here (Opus for #5/#2 correctness, So
 - [ ] #22 Telegram per-run organize digest (primary "what the agent did" channel)
 - [x] #24 Remote YouTube duplicate cleanup planner + executor — merged to `main` via PR #25;
   planner, reconciliation, controlled execution, and first live YouTube batch are done
-- [ ] #8 Ollama reachability gating + `POST /api/agent/process-now` + button
+- [x] #8 Ollama reachability gating + `POST /api/agent/process-now` + button
 - [ ] #7 `ConsolidateAsync` real merge of overlapping-topic playlists (later)
 
 ### Issue hygiene needed
