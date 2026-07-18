@@ -29,9 +29,11 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
   selected as inbox after resync. Current live API shows id `407`, name `myinbox`,
   `isInbox=false`, `itemCount=7`. PR #43 added search, Settings suggestions, and sync cache
   invalidation; merged and deployed on 2026-07-18.
-- [ ] #34 **Automation policy / Autopilot settings** — persisted mode (`manual`,
+- [x] #34 **Automation policy / Autopilot settings** — persisted mode (`manual`,
   `first_week_approval`, `aggressive_with_undo`), thresholds, daily budgets, public AI
-  fallback policy, off-peak window, pause/resume.
+  fallback policy, off-peak window, pause/resume. PR #45 added the API, Settings UI,
+  quota/last-run/next-run status, persisted move-budget and threshold usage, and worker
+  pause/mode gating; merged and deployed on 2026-07-18.
 - [ ] **#8 Process now + reachability** — `POST /api/agent/process-now`, UI button, clean
   Ollama-unavailable skip, optional cloud fallback.
 - [ ] #35 **Background operation queue** — durable queued/scheduled/running/completed/failed
