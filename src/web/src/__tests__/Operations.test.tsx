@@ -16,8 +16,8 @@ import {
 } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
-import { useOperationsActivity, useOperationsQuota } from '@/hooks/useOperations';
-import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult, OperationsActivityFeed, OperationsQuota } from '@/types';
+import { useCancelOperation, useOperationQueue, useOperationsActivity, useOperationsQuota, useQueueOperation } from '@/hooks/useOperations';
+import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult, OperationsActivityFeed, OperationsQuota, OperationRequest } from '@/types';
 import OperationsPage from '../app/operations/page';
 
 const mockUsePipelineStatus = usePipelineStatus as jest.MockedFunction<typeof usePipelineStatus>;
@@ -31,6 +31,9 @@ const mockUseBuildRemoteCleanupPlan = useBuildRemoteCleanupPlan as jest.MockedFu
 const mockUseExecuteRemoteCleanup = useExecuteRemoteCleanup as jest.MockedFunction<typeof useExecuteRemoteCleanup>;
 const mockUseOperationsActivity = useOperationsActivity as jest.MockedFunction<typeof useOperationsActivity>;
 const mockUseOperationsQuota = useOperationsQuota as jest.MockedFunction<typeof useOperationsQuota>;
+const mockUseOperationQueue = useOperationQueue as jest.MockedFunction<typeof useOperationQueue>;
+const mockUseQueueOperation = useQueueOperation as jest.MockedFunction<typeof useQueueOperation>;
+const mockUseCancelOperation = useCancelOperation as jest.MockedFunction<typeof useCancelOperation>;
 
 const makeQueryResult = <T,>(data: T) => ({
   data,
@@ -126,6 +129,28 @@ describe('OperationsPage', () => {
     totalCount: 1,
     hasMore: false,
   };
+
+  const sampleOperationQueue: OperationRequest[] = [
+    {
+      id: 12,
+      type: 'full_sync',
+      status: 'deferred',
+      createdBy: 'user',
+      source: null,
+      target: null,
+      maxItems: 50,
+      quotaEstimate: 100,
+      notBefore: null,
+      allowedWindowStart: '23:00',
+      allowedWindowEnd: '05:00',
+      runId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      startedAt: null,
+      completedAt: null,
+      error: 'Operation is outside allowed execution window.',
+    },
+  ];
 
   const sampleActiveSyncRun: PipelineRun = {
     runId: 'sync-run-123',
@@ -251,6 +276,17 @@ describe('OperationsPage', () => {
     } as ReturnType<typeof useReclassifyGeneratedTags>);
     mockUseOperationsQuota.mockReturnValue(makeQueryResult(sampleOperationsQuota));
     mockUseOperationsActivity.mockReturnValue(makeQueryResult(sampleActivityFeed));
+    mockUseOperationQueue.mockReturnValue(makeQueryResult(sampleOperationQueue));
+    mockUseQueueOperation.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useQueueOperation>);
+    mockUseCancelOperation.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useCancelOperation>);
     mockUseDuplicateReview.mockReturnValue(makeQueryResult([]));
     mockUseBuildRemoteCleanupPlan.mockReturnValue({
       mutateAsync: jest.fn(),
@@ -289,6 +325,57 @@ describe('OperationsPage', () => {
     expect(screen.getByText(/34 \/ 80/)).toBeInTheDocument();
     expect(screen.getByText('Organize Activity')).toBeInTheDocument();
     expect(screen.getAllByText('Removed duplicate video from playlist "Inbox".').length).toBeGreaterThan(0);
+  });
+
+  it('renders operation queue and can enqueue an off-peak full sync', () => {
+    const mutateAsync = jest.fn();
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseQueueOperation.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useQueueOperation>);
+
+    render(<OperationsPage />);
+
+    expect(screen.getByText('Operation Queue')).toBeInTheDocument();
+    expect(screen.getByText('full_sync')).toBeInTheDocument();
+    expect(screen.getByText('deferred')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /queue full sync/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      type: 'full_sync',
+      source: null,
+      target: null,
+      maxItems: 50,
+      quotaEstimate: 100,
+      notBefore: null,
+      allowedWindowStart: '23:00',
+      allowedWindowEnd: '05:00',
+    });
+  });
+
+  it('cancels queued operation from operation queue', () => {
+    const mutateAsync = jest.fn();
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseCancelOperation.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useCancelOperation>);
+
+    render(<OperationsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel operation 12/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(12);
   });
 
   it('opens generated-tag reclassification confirmation', () => {

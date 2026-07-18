@@ -289,3 +289,34 @@ export interface OperationsQuota {
   isBlocked: boolean;
   message: string;
 }
+
+export interface OperationRequest {
+  id: number;
+  type: string;
+  status: 'queued' | 'scheduled' | 'running' | 'completed' | 'deferred' | 'failed' | 'canceled';
+  createdBy: string;
+  source: string | null;
+  target: string | null;
+  maxItems: number | null;
+  quotaEstimate: number | null;
+  notBefore: string | null;
+  allowedWindowStart: string | null;
+  allowedWindowEnd: string | null;
+  runId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+}
+
+export interface CreateOperationRequest {
+  type: string;
+  source: string | null;
+  target: string | null;
+  maxItems: number | null;
+  quotaEstimate: number | null;
+  notBefore: string | null;
+  allowedWindowStart: string | null;
+  allowedWindowEnd: string | null;
+}

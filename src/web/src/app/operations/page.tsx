@@ -11,7 +11,7 @@ import {
 } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
-import { useOperationsActivity, useOperationsQuota } from '@/hooks/useOperations';
+import { useCancelOperation, useOperationQueue, useOperationsActivity, useOperationsQuota, useQueueOperation } from '@/hooks/useOperations';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -99,6 +99,9 @@ export default function OperationsPage() {
   const activityLimit = 10;
   const { data: activityFeed, refetch: refetchActivity } = useOperationsActivity(activityLimit, activityOffset);
   const { data: operationsQuota, isLoading: isOperationsQuotaLoading, refetch: refetchOperationsQuota } = useOperationsQuota();
+  const { data: operationQueue, refetch: refetchOperationQueue } = useOperationQueue();
+  const queueOperation = useQueueOperation();
+  const cancelOperation = useCancelOperation();
   const { data: duplicates } = useDuplicateReview();
   const remoteCleanupPlan = useBuildRemoteCleanupPlan();
   const remoteCleanupExecution = useExecuteRemoteCleanup();
@@ -144,7 +147,25 @@ export default function OperationsPage() {
     refetchOpsHealth();
     refetchActivity();
     refetchOperationsQuota();
+    refetchOperationQueue();
     if (selectedRunId) refetchEvents();
+  };
+
+  const queueFullSync = async () => {
+    await queueOperation.mutateAsync({
+      type: 'full_sync',
+      source: null,
+      target: null,
+      maxItems: 50,
+      quotaEstimate: 100,
+      notBefore: null,
+      allowedWindowStart: '23:00',
+      allowedWindowEnd: '05:00',
+    });
+  };
+
+  const cancelQueuedOperation = async (operationId: number) => {
+    await cancelOperation.mutateAsync(operationId);
   };
 
   const buildRemoteCleanupPlan = async () => {
@@ -655,6 +676,78 @@ export default function OperationsPage() {
           )}
         </Card>
       </div>
+
+      <Card>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Operation Queue</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Durable staged work for off-peak sync, organize, restore, cleanup, and reclassification jobs.
+            </p>
+          </div>
+          <Button onClick={queueFullSync} disabled={queueOperation.isPending}>
+            {queueOperation.isPending ? 'Queueing...' : 'Queue Full Sync'}
+          </Button>
+        </div>
+
+        {!operationQueue ? (
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            Checking queued operations…
+          </div>
+        ) : operationQueue.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            No queued operations.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {operationQueue.map((operation) => (
+              <div
+                key={operation.id}
+                className="rounded-lg border border-gray-200 p-4 dark:border-gray-800"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{operation.type}</p>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        operation.status === 'failed'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300'
+                          : operation.status === 'running'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
+                          : operation.status === 'completed'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300'
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                      }`}>
+                        {operation.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Window {operation.allowedWindowStart ?? 'any'}-{operation.allowedWindowEnd ?? 'any'}
+                      {' · '}
+                      quota {operation.quotaEstimate ?? 'n/a'}
+                      {' · '}
+                      updated {new Date(operation.updatedAt).toLocaleString()}
+                    </p>
+                    {operation.error && (
+                      <p className="mt-2 text-sm text-orange-700 dark:text-orange-300">{operation.error}</p>
+                    )}
+                  </div>
+                  {(operation.status === 'queued' || operation.status === 'scheduled' || operation.status === 'deferred') && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => cancelQueuedOperation(operation.id)}
+                      disabled={cancelOperation.isPending}
+                      aria-label={`Cancel operation ${operation.id}`}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card>
         <div className="flex items-center justify-between gap-3">
