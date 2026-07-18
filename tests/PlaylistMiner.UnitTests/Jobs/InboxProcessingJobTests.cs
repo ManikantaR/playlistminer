@@ -30,7 +30,9 @@ public class InboxProcessingJobTests
         pipelineMock.Setup(p => p.CategorizeNewVideosAsync(It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         var logger = new Mock<ILogger<InboxProcessingJob>>();
-        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, logger.Object);
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, ollamaMock.Object, logger.Object);
 
         // Act
         await job.Execute(CreateContext());
@@ -50,7 +52,9 @@ public class InboxProcessingJobTests
         pipelineMock.Setup(p => p.CategorizeNewVideosAsync(It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         var logger = new Mock<ILogger<InboxProcessingJob>>();
-        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, logger.Object);
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, ollamaMock.Object, logger.Object);
 
         // Act
         await job.Execute(CreateContext());
@@ -70,12 +74,33 @@ public class InboxProcessingJobTests
         pipelineMock.Setup(p => p.CategorizeNewVideosAsync(It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         var logger = new Mock<ILogger<InboxProcessingJob>>();
-        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, logger.Object);
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, ollamaMock.Object, logger.Object);
 
         // Act
         await job.Execute(CreateContext());
 
         // Assert — called regardless (skipping is done internally)
         pipelineMock.Verify(p => p.CategorizeNewVideosAsync(It.IsAny<CancellationToken>()), Times.Once());
+    }
+
+    [Fact]
+    public async Task Test_ProcessInbox_WhenOllamaUnavailable_SkipsWithoutSyncing()
+    {
+        // Arrange
+        var syncMock = new Mock<ISyncService>(MockBehavior.Strict);
+        var pipelineMock = new Mock<ICategorizationPipeline>(MockBehavior.Strict);
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        var logger = new Mock<ILogger<InboxProcessingJob>>();
+        var job = new InboxProcessingJob(syncMock.Object, pipelineMock.Object, ollamaMock.Object, logger.Object);
+
+        // Act
+        await job.Execute(CreateContext());
+
+        // Assert
+        syncMock.Verify(s => s.SyncInboxAsync(It.IsAny<CancellationToken>()), Times.Never());
+        pipelineMock.Verify(p => p.CategorizeNewVideosAsync(It.IsAny<CancellationToken>()), Times.Never());
     }
 }

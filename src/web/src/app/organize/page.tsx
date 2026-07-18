@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import { useBuildOrganizePlan, useExecuteOrganize } from '@/hooks/useOrganize';
+import { useBuildOrganizePlan, useExecuteOrganize, useProcessNow } from '@/hooks/useOrganize';
 import { usePipelineHistory } from '@/hooks/usePipeline';
 
 function formatActionLabel(action: string, targetPlaylistName: string | null) {
@@ -33,6 +33,7 @@ function isManualInterventionRun(run: {
 export default function OrganizePage() {
   const organizePlan = useBuildOrganizePlan();
   const organizeExecution = useExecuteOrganize();
+  const processNow = useProcessNow();
   const pipelineHistory = usePipelineHistory();
   const latestManualInterventionRun = pipelineHistory.data?.find(isManualInterventionRun);
 
@@ -44,6 +45,10 @@ export default function OrganizePage() {
     await organizeExecution.mutateAsync();
   };
 
+  const processIncomingNow = async () => {
+    await processNow.mutateAsync();
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -53,9 +58,14 @@ export default function OrganizePage() {
             Dry-run preview for draining the incoming playlist into managed topic playlists.
           </p>
         </div>
-        <Button onClick={buildPlan} disabled={organizePlan.isPending}>
-          {organizePlan.isPending ? 'Planning...' : 'Build Organize Plan'}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button onClick={processIncomingNow} disabled={processNow.isPending}>
+            {processNow.isPending ? 'Processing...' : 'Process Now'}
+          </Button>
+          <Button onClick={buildPlan} disabled={organizePlan.isPending}>
+            {organizePlan.isPending ? 'Planning...' : 'Build Organize Plan'}
+          </Button>
+        </div>
       </div>
 
       {latestManualInterventionRun && (
@@ -129,6 +139,37 @@ export default function OrganizePage() {
             {organizeExecution.data.errors.length > 0 && (
               <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-300">
                 {organizeExecution.data.errors.join(' ')}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {processNow.data && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Process now result</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{processNow.data.message}</p>
+            </div>
+            {processNow.data.execution && (
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Synced</p>
+                  <p className="mt-1 text-2xl font-bold">{processNow.data.sync?.videosProcessed ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Planned</p>
+                  <p className="mt-1 text-2xl font-bold">{processNow.data.execution.movesPlanned}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Executed</p>
+                  <p className="mt-1 text-2xl font-bold">{processNow.data.execution.movesExecuted}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Deferred</p>
+                  <p className="mt-1 text-2xl font-bold">{processNow.data.execution.deferredCount}</p>
+                </div>
               </div>
             )}
           </div>

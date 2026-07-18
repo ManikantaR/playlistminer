@@ -8,12 +8,19 @@ namespace PlaylistMiner.Worker.Jobs;
 public class InboxProcessingJob(
     ISyncService syncService,
     ICategorizationPipeline pipeline,
+    IOllamaCategorizer ollamaCategorizer,
     ILogger<InboxProcessingJob> logger) : IJob
 {
     public async Task Execute(IJobExecutionContext context)
     {
         try
         {
+            if (!await ollamaCategorizer.IsAvailableAsync(context.CancellationToken))
+            {
+                logger.LogInformation("Skipping inbox processing because Ollama is unavailable.");
+                return;
+            }
+
             await syncService.SyncInboxAsync(context.CancellationToken);
             await pipeline.CategorizeNewVideosAsync(context.CancellationToken);
         }
