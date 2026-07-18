@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PlaylistMiner.Api.Models;
 using PlaylistMiner.Core.DTOs;
+using PlaylistMiner.Core.Exceptions;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
 
@@ -10,7 +11,8 @@ namespace PlaylistMiner.Api.Controllers;
 [Route("api/playlists")]
 public class PlaylistsController(
     IPlaylistRepository playlistRepository,
-    IPlaylistOrganizer playlistOrganizer) : ControllerBase
+    IPlaylistOrganizer playlistOrganizer,
+    IPlaylistRestoreService playlistRestoreService) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType<List<PlaylistDto>>(StatusCodes.Status200OK)]
@@ -67,5 +69,50 @@ public class PlaylistsController(
     {
         var result = await playlistOrganizer.ConsolidateAsync(ct);
         return Ok(result);
+    }
+
+    [HttpPost("{targetPlaylistId:int}/restore-sample")]
+    [ProducesResponseType<PlaylistRestoreResultDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RestoreSampleAsync(
+        int targetPlaylistId,
+        [FromBody] RestorePlaylistSampleRequest request,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await playlistRestoreService.RestoreSampleAsync(
+                request.SourcePlaylistId,
+                targetPlaylistId,
+                request.MaxCount,
+                ct);
+            return Ok(result);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid restore request.",
+                Detail = ex.Message
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Playlist not found.",
+                Detail = ex.Message
+            });
+        }
+        catch (QuotaExhaustedException ex)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "YouTube quota exhausted.",
+                Detail = ex.Message
+            });
+        }
     }
 }
