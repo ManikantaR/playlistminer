@@ -49,6 +49,22 @@ export interface Playlist {
   itemCount: number;
 }
 
+export interface AutomationPolicy {
+  mode: 'manual' | 'first_week_approval' | 'aggressive_with_undo';
+  highConfidenceThreshold: number;
+  reviewThreshold: number;
+  dailyMoveBudget: number;
+  nightlyRestoreBudget: number;
+  cleanupRecommendationCount: number;
+  offPeakWindowStart: string;
+  offPeakWindowEnd: string;
+  publicAiFallbackEnabled: boolean;
+  publicAiProvider: string | null;
+  publicAiModel: string | null;
+  transcriptCloudPolicy: 'never' | 'metadata_only' | 'allow_transcripts';
+  isPaused: boolean;
+}
+
 export interface DuplicatePlaylist {
   playlistId: number;
   playlistName: string;

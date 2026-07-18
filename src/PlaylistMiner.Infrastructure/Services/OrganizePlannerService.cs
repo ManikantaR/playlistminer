@@ -12,13 +12,17 @@ namespace PlaylistMiner.Infrastructure.Services;
 public sealed class OrganizePlannerService(
     PlaylistMinerDbContext db,
     IOptions<CategorizationOptions> options,
+    IAutomationPolicyService automationPolicyService,
     ILogger<OrganizePlannerService> logger) : IOrganizePlannerService
 {
     private sealed record TopicCandidate(string Topic, float Confidence);
 
     public async Task<OrganizePlanDto> BuildPlanAsync(CancellationToken ct = default)
     {
-        var confidenceThreshold = options.Value.AutoFileConfidence;
+        var policy = await automationPolicyService.GetPolicyAsync(ct);
+        var confidenceThreshold = policy.HighConfidenceThreshold > 0
+            ? policy.HighConfidenceThreshold
+            : options.Value.AutoFileConfidence;
         var inbox = await db.Playlists
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.IsInbox, ct);
