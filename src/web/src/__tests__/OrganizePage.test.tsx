@@ -5,13 +5,14 @@ import React from 'react';
 jest.mock('@/hooks/useOrganize');
 jest.mock('@/hooks/usePipeline');
 
-import { useBuildOrganizePlan, useExecuteOrganize } from '@/hooks/useOrganize';
+import { useBuildOrganizePlan, useExecuteOrganize, useProcessNow } from '@/hooks/useOrganize';
 import { usePipelineHistory } from '@/hooks/usePipeline';
 import OrganizePage from '../app/organize/page';
-import type { OrganizeExecutionResult, OrganizePlan, PipelineRun } from '@/types';
+import type { AgentProcessResult, OrganizeExecutionResult, OrganizePlan, PipelineRun } from '@/types';
 
 const mockUseBuildOrganizePlan = useBuildOrganizePlan as jest.MockedFunction<typeof useBuildOrganizePlan>;
 const mockUseExecuteOrganize = useExecuteOrganize as jest.MockedFunction<typeof useExecuteOrganize>;
+const mockUseProcessNow = useProcessNow as jest.MockedFunction<typeof useProcessNow>;
 const mockUsePipelineHistory = usePipelineHistory as jest.MockedFunction<typeof usePipelineHistory>;
 
 const renderPage = () => {
@@ -36,6 +37,11 @@ describe('OrganizePage', () => {
       data: undefined,
       isPending: false,
     } as ReturnType<typeof useExecuteOrganize>);
+    mockUseProcessNow.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useProcessNow>);
   });
 
   it('renders organize plan results after building the plan', () => {
@@ -164,6 +170,34 @@ describe('OrganizePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Execute Organize Batch' }));
     expect(mutateAsync).toHaveBeenCalled();
+  });
+
+  it('triggers process now and shows skipped reachability result', () => {
+    const mutateAsync = jest.fn();
+    const processResult: AgentProcessResult = {
+      status: 'skipped',
+      message: 'Ollama is unavailable. Incoming videos were left queued.',
+      sync: null,
+      execution: null,
+    };
+
+    mockUseBuildOrganizePlan.mockReturnValue({
+      mutateAsync: jest.fn(),
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useBuildOrganizePlan>);
+    mockUseProcessNow.mockReturnValue({
+      mutateAsync,
+      data: processResult,
+      isPending: false,
+    } as ReturnType<typeof useProcessNow>);
+
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Process Now' }));
+    expect(mutateAsync).toHaveBeenCalled();
+    expect(screen.getByText('Process now result')).toBeInTheDocument();
+    expect(screen.getByText(/Ollama is unavailable/)).toBeInTheDocument();
   });
 
   it('renders manual intervention guidance when the latest organize run failed irrecoverably', () => {

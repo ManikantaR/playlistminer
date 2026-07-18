@@ -38,6 +38,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
         services.AddScoped<IPlaylistRestoreService, PlaylistRestoreService>();
         services.AddScoped<IAutomationPolicyService, AutomationPolicyService>();
+        services.AddScoped<IAgentProcessService, AgentProcessService>();
         services.AddScoped<IOrganizePlannerService, OrganizePlannerService>();
         services.AddScoped<IOrganizeExecutorService, OrganizeExecutorService>();
         services.AddScoped<IOperationsObservabilityService, OperationsObservabilityService>();
@@ -119,6 +120,7 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IPlaylistOrganizer, PlaylistOrganizer>();
         services.AddScoped<IPlaylistRestoreService, PlaylistRestoreService>();
         services.AddScoped<IAutomationPolicyService, AutomationPolicyService>();
+        services.AddScoped<IAgentProcessService, AgentProcessService>();
         services.AddScoped<IOrganizePlannerService, OrganizePlannerService>();
         services.AddScoped<IOrganizeExecutorService, OrganizeExecutorService>();
         services.AddScoped<IOperationsObservabilityService, OperationsObservabilityService>();

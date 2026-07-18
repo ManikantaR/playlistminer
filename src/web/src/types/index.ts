@@ -138,6 +138,18 @@ export interface OrganizeExecutionResult {
   runId: string | null;
 }
 
+export interface AgentProcessResult {
+  status: 'completed' | 'skipped' | 'failed';
+  message: string;
+  sync: {
+    videosProcessed: number;
+    videosCategorized: number;
+    errors: string[];
+    deferredCount: number;
+  } | null;
+  execution: OrganizeExecutionResult | null;
+}
+
 export interface PagedResult<T> {
   items: T[];
   totalCount: number;
