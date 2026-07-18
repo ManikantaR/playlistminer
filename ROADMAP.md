@@ -61,6 +61,8 @@ cleanup recommendations, semantic search, and concept memory.
 
 Goal: the user has a reliable source playlist for the agent loop.
 
+Status: shipped via PR #43 on 2026-07-18 and deployed to the NAS.
+
 - Verify why `myinbox` did not appear as expected after UI resync.
 - Current live API finding on 2026-07-18: playlist exists as:
   - id `407`
