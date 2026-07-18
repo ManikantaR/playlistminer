@@ -62,6 +62,7 @@ export function useTriggerSync() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['syncStatus'] });
       qc.invalidateQueries({ queryKey: ['syncHistory'] });
+      qc.invalidateQueries({ queryKey: ['playlists'] });
     },
   });
 }

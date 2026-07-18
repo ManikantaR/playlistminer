@@ -47,21 +47,30 @@ export default function SettingsPage() {
 
   const connected = oauthStatus?.connected ?? false;
   const currentInbox = playlists?.find((playlist) => playlist.isInbox) ?? null;
+  const inboxLikePlaylists = playlists?.filter((playlist) => (
+    playlist.name.toLowerCase().includes('inbox')
+  )) ?? [];
+  const suggestedInbox = inboxLikePlaylists.find((playlist) => !playlist.isInbox) ?? null;
+  const defaultPlaylist = currentInbox
+    ? playlists?.find((playlist) => !playlist.isInbox) ?? currentInbox
+    : suggestedInbox ?? playlists?.[0] ?? null;
   const defaultInboxId = playlists && playlists.length > 0
-    ? String((playlists.find((playlist) => !playlist.isInbox) ?? currentInbox ?? playlists[0]).id)
+    ? String(defaultPlaylist?.id ?? '')
     : '';
   const playlistSelectionStillExists = playlists?.some((playlist) => String(playlist.id) === selectedInboxId) ?? false;
   const effectiveSelectedInboxId = selectedInboxId && playlistSelectionStillExists
     ? selectedInboxId
     : defaultInboxId;
 
-  const handleSetInbox = async () => {
-    if (!effectiveSelectedInboxId) {
+  const handleSetInbox = async (playlistId?: number) => {
+    const targetPlaylistId = playlistId ?? Number(effectiveSelectedInboxId);
+
+    if (!targetPlaylistId) {
       return;
     }
 
     try {
-      await setInboxMutation.mutateAsync(Number(effectiveSelectedInboxId));
+      await setInboxMutation.mutateAsync(targetPlaylistId);
       toast.success('Inbox playlist updated');
     } catch {
       toast.error('Failed to set inbox');
@@ -127,31 +136,62 @@ export default function SettingsPage() {
           ) : !playlists || playlists.length === 0 ? (
             <p className="text-sm text-gray-500">Sync your playlists first to choose an incoming playlist.</p>
           ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="flex-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-                Incoming playlist
-                <select
-                  value={effectiveSelectedInboxId}
-                  onChange={(e) => setSelectedInboxId(e.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-                  aria-label="Incoming playlist"
+            <>
+              {inboxLikePlaylists.length > 0 && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Suggested incoming playlists
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {inboxLikePlaylists.map((playlist) => (
+                      <div key={playlist.id} className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">{playlist.name}</p>
+                          <p className="text-xs text-gray-500">{playlist.itemCount} videos</p>
+                        </div>
+                        {!playlist.isInbox && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetInbox(playlist.id)}
+                            disabled={setInboxMutation.isPending}
+                            aria-label={`Set ${playlist.name} as incoming`}
+                            className="rounded-lg border border-blue-300 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:text-blue-200 dark:hover:bg-blue-900/40"
+                          >
+                            Set
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="flex-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+                  Incoming playlist
+                  <select
+                    value={effectiveSelectedInboxId}
+                    onChange={(e) => setSelectedInboxId(e.target.value)}
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+                    aria-label="Incoming playlist"
+                  >
+                    {playlists.map((playlist) => (
+                      <option key={playlist.id} value={playlist.id}>
+                        {playlist.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleSetInbox()}
+                  disabled={!effectiveSelectedInboxId || setInboxMutation.isPending}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 >
-                  {playlists.map((playlist) => (
-                    <option key={playlist.id} value={playlist.id}>
-                      {playlist.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={handleSetInbox}
-                disabled={!effectiveSelectedInboxId || setInboxMutation.isPending}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {setInboxMutation.isPending ? 'Saving...' : 'Set as Incoming'}
-              </button>
-            </div>
+                  {setInboxMutation.isPending ? 'Saving...' : 'Set as Incoming'}
+                </button>
+              </div>
+            </>
           )}
         </div>
       </Card>
