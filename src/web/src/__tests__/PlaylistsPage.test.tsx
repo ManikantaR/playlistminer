@@ -83,6 +83,27 @@ describe('PlaylistsPage', () => {
     expect(screen.getByRole('button', { name: /set programming as inbox/i })).toBeInTheDocument();
   });
 
+  it('filters playlists by name so myinbox is easy to find', () => {
+    mockUsePlaylists.mockReturnValue(
+      makeQueryResult([
+        makePlaylist({ id: 1, name: 'AI Skills', youTubeId: 'PL0001' }),
+        makePlaylist({ id: 407, name: 'myinbox', youTubeId: 'PLH_QpnlkswM8', itemCount: 7 }),
+      ]) as ReturnType<typeof usePlaylists>,
+    );
+    mockUseSetInboxPlaylist.mockReturnValue({
+      mutateAsync: jest.fn(),
+      isPending: false,
+    } as ReturnType<typeof useSetInboxPlaylist>);
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Search playlists'), { target: { value: 'MYINBOX' } });
+
+    expect(screen.getByText('myinbox')).toBeInTheDocument();
+    expect(screen.getByText('7 videos')).toBeInTheDocument();
+    expect(screen.queryByText('AI Skills')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /set myinbox as inbox/i })).toBeInTheDocument();
+  });
+
   it('sets a playlist as inbox and shows success feedback', async () => {
     const mutateAsync = jest.fn().mockResolvedValue(undefined);
 

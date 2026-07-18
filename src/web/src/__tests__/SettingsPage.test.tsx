@@ -116,6 +116,32 @@ describe('SettingsPage', () => {
     expect(mockToast.success).toHaveBeenCalledWith('Inbox playlist updated');
   });
 
+  it('suggests synced inbox-like playlists and can set myinbox as incoming', async () => {
+    const mutateAsync = jest.fn().mockResolvedValue(undefined);
+
+    mockUsePlaylists.mockReturnValue(
+      makeQueryResult([
+        makePlaylist({ id: 10, name: 'AI Skills', youTubeId: 'PL0010' }),
+        makePlaylist({ id: 407, name: 'myinbox', youTubeId: 'PLH_QpnlkswM8', itemCount: 7 }),
+      ]) as ReturnType<typeof usePlaylists>,
+    );
+    mockUseSetInboxPlaylist.mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as ReturnType<typeof useSetInboxPlaylist>);
+
+    renderPage();
+
+    expect(screen.getByText('Suggested incoming playlists')).toBeInTheDocument();
+    expect(screen.getAllByText('myinbox')).toHaveLength(2);
+    expect(screen.getByLabelText('Incoming playlist')).toHaveValue('407');
+
+    fireEvent.click(screen.getByRole('button', { name: /set myinbox as incoming/i }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(407));
+    expect(mockToast.success).toHaveBeenCalledWith('Inbox playlist updated');
+  });
+
   it('shows an error toast when updating the inbox fails', async () => {
     const mutateAsync = jest.fn().mockRejectedValue(new Error('boom'));
 
