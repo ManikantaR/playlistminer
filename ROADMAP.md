@@ -319,14 +319,14 @@ the unit of implementation. Each issue should include:
 
 Recommended new issues:
 
-- Inbox reliability: `myinbox` selection/sync/UI visibility
-- Automation policy and Autopilot page
-- Background operation queue and off-peak scheduler
-- Playlist restore full background job
-- First-week approval queue
+- #33 Inbox reliability: `myinbox` selection/sync/UI visibility
+- #34 Automation policy and Autopilot page
+- #35 Background operation queue and off-peak scheduler
+- #36 Playlist restore full background job
+- #37 First-week approval queue
 - Telegram run digest and approval channel
-- Cleanup recommendation engine
-- Public AI provider fallback policy
-- Transcript ingestion/cache
-- Semantic search
-
+- #38 Cleanup recommendation engine
+- #39 Public AI provider fallback policy
+- #40 Transcript ingestion/cache
+- #41 Semantic search
+- #42 Roadmap hygiene: reconcile organize executor issue #5 with one-playlist policy
