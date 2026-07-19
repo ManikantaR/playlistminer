@@ -42,10 +42,10 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
   and Operations UI panel. Remaining: job-specific checkpoint payloads for restore/cleanup,
   richer detail UI, resume semantics per workflow, and Telegram notifications.
 - [~] #36 **Full `AI Skills` restore as a nightly job** — source old playlist id `6`, target new
-  playlist id `409`; sample restore already added 5 videos on 2026-07-18. Current branch adds
+  playlist id `409`; sample restore already added 5 videos on 2026-07-18. PR #51 added
   `playlist_restore` queue support, a 150-item off-peak Operations UI trigger, and worker batch
-  execution. Remaining: deployed verification, richer restore progress/checkpoint UI, remaining
-  count reporting, and Telegram digest.
+  execution; merged and deployed on 2026-07-18. Remaining: richer restore progress/checkpoint UI,
+  remaining count reporting, and Telegram digest.
 - [ ] #37 **First-week approval queue** — backend-backed high-confidence action queue with UI
   checkboxes, approve/reject/edit target, feedback capture.
 - [ ] **#22 Telegram run digest** — what changed, quota, undo window, failures, approvals.
