@@ -15,6 +15,7 @@ public class PlaylistRestoreService(
     ILogger<PlaylistRestoreService> logger) : IPlaylistRestoreService
 {
     private const int MaxSafeBatchSize = 25;
+    private const int MaxNightlyBatchSize = 500;
 
     public async Task<PlaylistRestoreResultDto> RestoreSampleAsync(
         int sourcePlaylistId,
@@ -30,6 +31,32 @@ public class PlaylistRestoreService(
                 $"Restore sample size must be between 1 and {MaxSafeBatchSize}.");
         }
 
+        return await RestoreBatchCoreAsync(sourcePlaylistId, targetPlaylistId, maxCount, ct);
+    }
+
+    public async Task<PlaylistRestoreResultDto> RestoreBatchAsync(
+        int sourcePlaylistId,
+        int targetPlaylistId,
+        int maxCount,
+        CancellationToken ct = default)
+    {
+        if (maxCount is < 1 or > MaxNightlyBatchSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxCount),
+                maxCount,
+                $"Restore batch size must be between 1 and {MaxNightlyBatchSize}.");
+        }
+
+        return await RestoreBatchCoreAsync(sourcePlaylistId, targetPlaylistId, maxCount, ct);
+    }
+
+    private async Task<PlaylistRestoreResultDto> RestoreBatchCoreAsync(
+        int sourcePlaylistId,
+        int targetPlaylistId,
+        int maxCount,
+        CancellationToken ct)
+    {
         var sourcePlaylist = await db.Playlists.FindAsync([sourcePlaylistId], ct)
             ?? throw new KeyNotFoundException($"Source playlist {sourcePlaylistId} was not found.");
 

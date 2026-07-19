@@ -119,7 +119,13 @@ What was done:
 Next restore direction:
 
 - Do not run full restore interactively.
-- Convert restore into queued off-peak background job.
+- Current branch converts restore into a queued off-peak background job:
+  - operation type: `playlist_restore`
+  - source: `6`
+  - target: `409`
+  - batch size/quota estimate: `150`
+  - allowed window: `23:00-05:00`
+  - UI trigger: `/operations` -> `Queue AI Skills Restore`
 - Use nightly batches, roughly `120-150` adds/night unless quota pressure says otherwise.
 - Prefer after YouTube daily quota reset at midnight Pacific Time; operational local window
   remains `23:00-05:00`.

@@ -52,6 +52,29 @@ public class OperationQueueServiceTests
     }
 
     [Fact]
+    public async Task Test_QueueAsync_WhenPlaylistRestore_PersistsPlaylistIds()
+    {
+        using var db = CreateDb();
+        var service = new OperationQueueService(db);
+        var request = new CreateOperationRequestDto(
+            Type: "playlist_restore",
+            Source: "6",
+            Target: "409",
+            MaxItems: 150,
+            QuotaEstimate: 150,
+            NotBefore: null,
+            AllowedWindowStart: "23:00",
+            AllowedWindowEnd: "05:00");
+
+        var queued = await service.QueueAsync(request);
+
+        queued.Type.Should().Be("playlist_restore");
+        queued.Source.Should().Be("6");
+        queued.Target.Should().Be("409");
+        queued.MaxItems.Should().Be(150);
+    }
+
+    [Fact]
     public async Task Test_GetNextRunnableAsync_WhenOutsideAllowedWindow_DefersOperation()
     {
         // Arrange
