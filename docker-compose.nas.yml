@@ -61,6 +61,9 @@ services:
       # API health reports Ollama reachability; keep it aligned with the worker.
       Categorization__OllamaBaseUrl: ${MAC_OLLAMA_URL:-http://host.docker.internal:11434}
       Categorization__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      Categorization__MaxVideosPerRun: ${CATEGORIZATION_MAX_VIDEOS_PER_RUN:-200}
+      PublicAI__GeminiApiKey: ${GEMINI_API_KEY:-}
+      PublicAI__OpenAIApiKey: ${OPENAI_API_KEY:-}
     depends_on:
       pm-db:
         condition: service_healthy
@@ -101,6 +104,9 @@ services:
       # (Ollama must bind 0.0.0.0 on the Mac: launchctl setenv OLLAMA_HOST 0.0.0.0)
       Categorization__OllamaBaseUrl: ${MAC_OLLAMA_URL:-http://host.docker.internal:11434}
       Categorization__OllamaModel: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      Categorization__MaxVideosPerRun: ${CATEGORIZATION_MAX_VIDEOS_PER_RUN:-200}
+      PublicAI__GeminiApiKey: ${GEMINI_API_KEY:-}
+      PublicAI__OpenAIApiKey: ${OPENAI_API_KEY:-}
     volumes:
       - /volume1/docker/playlistminer/backup:/app/backups
       - /volume1/docker/playlistminer/concepts:/app/concepts

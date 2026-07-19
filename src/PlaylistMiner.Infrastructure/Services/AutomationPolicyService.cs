@@ -25,6 +25,12 @@ public class AutomationPolicyService(PlaylistMinerDbContext db) : IAutomationPol
         "allow_transcripts"
     ];
 
+    private static readonly HashSet<string> AllowedPublicAiProviders =
+    [
+        "openai",
+        "gemini"
+    ];
+
     public async Task<AutomationPolicyDto> GetPolicyAsync(CancellationToken ct = default)
     {
         var settings = await db.Settings
@@ -147,9 +153,19 @@ public class AutomationPolicyService(PlaylistMinerDbContext db) : IAutomationPol
             throw new ArgumentException("Public AI provider is required when fallback is enabled.");
         }
 
+        if (!AllowedPublicAiProviders.Contains(request.PublicAiProvider.Trim().ToLowerInvariant()))
+        {
+            throw new ArgumentException("Unsupported public AI provider.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.PublicAiModel))
         {
             throw new ArgumentException("Public AI model is required when fallback is enabled.");
+        }
+
+        if (request.PublicAiModel.Any(char.IsWhiteSpace))
+        {
+            throw new ArgumentException("Public AI model must be an API model id, not a display label.");
         }
     }
 

@@ -11,6 +11,17 @@ import { useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import type { AutomationPolicy } from '@/types';
 
+const PUBLIC_AI_MODEL_OPTIONS = {
+  gemini: [
+    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
+    { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  ],
+  openai: [
+    { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+    { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+  ],
+} as const;
+
 function OAuthAlerts() {
   const searchParams = useSearchParams();
   const justConnected = searchParams.get('connected') === 'true';
@@ -119,6 +130,11 @@ export default function SettingsPage() {
   const nextScheduledRun = effectivePolicyDraft
     ? `${effectivePolicyDraft.offPeakWindowStart} off-peak window`
     : 'Not scheduled';
+  const publicAiModelOptions = effectivePolicyDraft?.publicAiProvider === 'openai'
+    ? PUBLIC_AI_MODEL_OPTIONS.openai
+    : effectivePolicyDraft?.publicAiProvider === 'gemini'
+    ? PUBLIC_AI_MODEL_OPTIONS.gemini
+    : [];
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -462,14 +478,20 @@ export default function SettingsPage() {
                 </label>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
                   Public AI model
-                  <input
-                    type="text"
+                  <select
                     value={effectivePolicyDraft.publicAiModel ?? ''}
                     onChange={(event) => updatePolicyDraft('publicAiModel', event.target.value || null)}
                     disabled={!effectivePolicyDraft.publicAiFallbackEnabled}
                     aria-label="Public AI model"
                     className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
-                  />
+                  >
+                    <option value="">None</option>
+                    {publicAiModelOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">

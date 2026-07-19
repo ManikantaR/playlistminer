@@ -267,6 +267,15 @@ Policy:
 - Private concept notes/default learning profile should stay local unless the user opts in.
 - Every generated suggestion records provider/model/source.
 
+Current provider/key direction:
+
+- Live policy currently uses provider `gemini`, model id `gemini-3.1-flash-lite`.
+- Use smaller models by default:
+  - Gemini: `gemini-3.1-flash-lite`, then `gemini-3.5-flash` only if needed.
+  - OpenAI: `gpt-5.6-luna`, then `gpt-5.6-terra` only if needed.
+- NAS env slots are `GEMINI_API_KEY` and `OPENAI_API_KEY`; values belong only in NAS secrets.
+- Public provider fallback implementation remains #39.
+
 ### 10. Transcript and Semantic Search
 
 Goal: make the library useful for learning, not just filing.

@@ -2,6 +2,7 @@ namespace PlaylistMiner.Infrastructure.Categorization;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using PlaylistMiner.Core.Categorization;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
@@ -13,6 +14,7 @@ public class CategorizationPipeline(
     IOllamaCategorizer ollamaCategorizer,
     PlaylistMinerDbContext db,
     IPipelineRunTracker tracker,
+    IOptions<CategorizationOptions> options,
     ILogger<CategorizationPipeline> logger) : ICategorizationPipeline
 {
     public async Task<List<TagSuggestion>> ClassifyAsync(int videoId, CancellationToken ct = default)
@@ -126,7 +128,17 @@ public class CategorizationPipeline(
                 r.VideosPendingTagging = newVideoIds.Count;
             }, message: $"Found {newVideoIds.Count} videos pending tagging.", ct: ct);
 
-            foreach (var videoId in newVideoIds)
+            var maxVideosPerRun = Math.Max(1, options.Value.MaxVideosPerRun);
+            var batchVideoIds = newVideoIds.Take(maxVideosPerRun).ToList();
+
+            await tracker.UpdateRunAsync(
+                runId,
+                _ => { },
+                phase: "categorizing",
+                message: $"Categorizing {batchVideoIds.Count} of {newVideoIds.Count} pending videos this run.",
+                ct: ct);
+
+            foreach (var videoId in batchVideoIds)
             {
                 try
                 {
