@@ -142,6 +142,28 @@ Next restore direction:
 - Telegram/status digest should report added count, remaining count, quota used, failures,
   and next scheduled batch.
 
+## Categorization stall status (2026-07-18)
+
+Live symptom:
+
+- Latest failed run: `26a0f810-15d4-4918-88fa-745074671431`
+- Pipeline type: `categorization`
+- Failure: stale-run reaper marked it failed after no progress for 15 minutes.
+- It had `8464` pending candidates and processed only `76` before failure.
+- A prior same-day categorization run also failed as stalled after processing `462`.
+
+Fix in current branch:
+
+- Adds `Categorization:MaxVideosPerRun` with default `200`.
+- Applies the cap in `CategorizeNewVideosAsync` so scheduled/inbox categorization does not try
+  the entire backlog in one Quartz run.
+- Adds progress message `Categorizing X of Y pending videos this run.`
+- NAS compose exposes `CATEGORIZATION_MAX_VIDEOS_PER_RUN` for API/worker.
+- Live automation policy was corrected through the app API to use provider `gemini` and model
+  id `gemini-3.1-flash-lite`.
+- NAS compose now has env slots for `GEMINI_API_KEY` and `OPENAI_API_KEY`; actual secret values
+  still need to be added only in the NAS `.env` file.
+
 ## Inbox status (2026-07-18)
 
 The intended inbox is `myinbox` / `MyInbox`. The user reported it did not show up after

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using PlaylistMiner.Core.Categorization;
 using PlaylistMiner.Core.Interfaces;
@@ -45,7 +46,8 @@ public class CategorizationPipelineTests
         PlaylistMinerDbContext db,
         IKeywordMatcher? keyword = null,
         ITfIdfScorer? tfidf = null,
-        IOllamaCategorizer? ollama = null)
+        IOllamaCategorizer? ollama = null,
+        CategorizationOptions? options = null)
     {
         var keywordMock = keyword ?? Mock.Of<IKeywordMatcher>(m =>
             m.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()) == Task.FromResult(new List<TagSuggestion>()));
@@ -60,6 +62,7 @@ public class CategorizationPipelineTests
             ollamaMock,
             db,
             new PipelineRunTracker(db),
+            Options.Create(options ?? new CategorizationOptions()),
             NullLogger<CategorizationPipeline>.Instance);
     }
 
@@ -380,5 +383,42 @@ public class CategorizationPipelineTests
         run.VideosTagged.Should().Be(1);
         run.VideosSkipped.Should().Be(1);
         run.RuleBasedHits.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Test_CategorizeNewVideos_WhenBacklogExceedsBatchLimit_ProcessesConfiguredBatchOnly()
+    {
+        // Arrange
+        using var db = CreateDb();
+        db.Tags.Add(MakeTag(1, "React"));
+        db.Videos.AddRange(
+            MakeVideo(1),
+            MakeVideo(2),
+            MakeVideo(3));
+        await db.SaveChangesAsync();
+
+        var keywordMock = new Mock<IKeywordMatcher>();
+        keywordMock.Setup(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TagSuggestion(1, "React", 0.8f, TagSource.RuleBased)]);
+
+        var pipeline = CreatePipeline(
+            db,
+            keyword: keywordMock.Object,
+            options: new CategorizationOptions { MaxVideosPerRun = 2 });
+
+        // Act
+        await pipeline.CategorizeNewVideosAsync();
+
+        // Assert
+        var run = await db.PipelineRuns.SingleAsync(r => r.PipelineType == "categorization");
+        run.Status.Should().Be("completed");
+        run.VideosPendingTagging.Should().Be(3);
+        run.VideosProcessed.Should().Be(2);
+        run.VideosTagged.Should().Be(2);
+        run.CurrentMessage.Should().Be("Run completed successfully.");
+
+        var savedTags = await db.VideoTags.OrderBy(vt => vt.VideoId).ToListAsync();
+        savedTags.Select(vt => vt.VideoId).Should().Equal(1, 2);
+        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 }

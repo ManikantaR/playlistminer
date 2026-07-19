@@ -8,4 +8,5 @@ public class CategorizationOptions
     public float TfIdfThreshold { get; set; } = 0.5f;
     public string OllamaBaseUrl { get; set; } = "http://pm-ollama:11434";
     public string OllamaModel { get; set; } = "mistral";
+    public int MaxVideosPerRun { get; set; } = 200;
 }

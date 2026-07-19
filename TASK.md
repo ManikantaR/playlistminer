@@ -54,6 +54,9 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
   duplicates, stale tech, low relevance, unavailable videos, transcript/title signals.
 - [ ] #39 **Public AI provider fallback** — OpenAI/Gemini provider abstraction, privacy policy,
   provider/model audit fields.
+- [~] **Categorization stalled-run fix** — current branch caps scheduled categorization to
+  `Categorization:MaxVideosPerRun` default `200`, exposes `CATEGORIZATION_MAX_VIDEOS_PER_RUN`,
+  and corrects public AI model selection to API ids. Remaining: deploy/verify next scheduled run.
 - [ ] #41 **Semantic search** — title/description/transcript/concept-note search; begin with
   Postgres full-text/trigram and add embeddings/vector search if needed.
 

@@ -118,4 +118,30 @@ public class AutomationPolicyServiceTests
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*High-confidence threshold*");
     }
+
+    [Fact]
+    public async Task Test_UpdatePolicyAsync_WhenPublicAiModelLooksLikeDisplayLabel_RejectsPolicy()
+    {
+        using var db = CreateDb();
+        var service = new AutomationPolicyService(db);
+        var request = new UpdateAutomationPolicyRequest(
+            Mode: "aggressive_with_undo",
+            HighConfidenceThreshold: 0.90f,
+            ReviewThreshold: 0.65f,
+            DailyMoveBudget: 80,
+            NightlyRestoreBudget: 150,
+            CleanupRecommendationCount: 5,
+            OffPeakWindowStart: "23:00",
+            OffPeakWindowEnd: "05:00",
+            PublicAiFallbackEnabled: true,
+            PublicAiProvider: "gemini",
+            PublicAiModel: "Gemini 3.5 Flash",
+            TranscriptCloudPolicy: "never",
+            IsPaused: false);
+
+        var act = async () => await service.UpdatePolicyAsync(request);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*Public AI model must be an API model id*");
+    }
 }
