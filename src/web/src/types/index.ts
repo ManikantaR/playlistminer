@@ -19,8 +19,10 @@ export interface VideoDetail extends Video {
 export interface TagSuggestion {
   tagId: number;
   tagName: string;
-  source: 'Manual' | 'RuleBased' | 'TfIdf' | 'Ollama' | 'Suggested';
+  source: 'Manual' | 'RuleBased' | 'TfIdf' | 'Ollama' | 'Gemini' | 'OpenAI' | 'Suggested';
   confidence: number | null;
+  provider?: string | null;
+  providerModel?: string | null;
 }
 
 export interface Tag {

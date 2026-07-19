@@ -52,8 +52,11 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
 - [ ] **#22 Telegram run digest** — what changed, quota, undo window, failures, approvals.
 - [ ] #38 **Cleanup recommendation engine** — top 5 delete candidates with reasons from
   duplicates, stale tech, low relevance, unavailable videos, transcript/title signals.
-- [ ] #39 **Public AI provider fallback** — OpenAI/Gemini provider abstraction, privacy policy,
-  provider/model audit fields.
+- [~] #39 **Public AI provider fallback** — current branch adds OpenAI/Gemini provider
+  abstraction, Ollama-down fallback selection, `transcriptCloudPolicy=never` metadata-only
+  prompting, and provider/model audit columns on generated `video_tags`. Remaining after merge:
+  deploy, run one bounded categorization batch with Ollama unavailable to prove the live cloud
+  path, and add richer UI health/status for public-provider availability.
 - [~] **Categorization stalled-run fix** — current branch caps scheduled categorization to
   `Categorization:MaxVideosPerRun` default `200`, exposes `CATEGORIZATION_MAX_VIDEOS_PER_RUN`,
   and corrects public AI model selection to API ids. Remaining: deploy/verify next scheduled run.

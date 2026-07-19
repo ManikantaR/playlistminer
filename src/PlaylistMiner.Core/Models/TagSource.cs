@@ -6,5 +6,7 @@ public enum TagSource
     RuleBased,
     TfIdf,
     Ollama,
+    Gemini,
+    OpenAI,
     Suggested
 }

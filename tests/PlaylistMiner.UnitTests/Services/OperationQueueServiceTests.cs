@@ -31,7 +31,7 @@ public class OperationQueueServiceTests
             Target: null,
             MaxItems: 25,
             QuotaEstimate: 100,
-            NotBefore: new DateTime(2026, 7, 19, 3, 0, 0, DateTimeKind.Utc),
+            NotBefore: DateTime.UtcNow.AddDays(1),
             AllowedWindowStart: "23:00",
             AllowedWindowEnd: "05:00");
 

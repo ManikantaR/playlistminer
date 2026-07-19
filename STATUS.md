@@ -415,6 +415,19 @@ What was fixed in PR `#43`:
 - Sync, restore, cleanup, and other heavy jobs should be staged for off-peak background windows.
 - User wants natural-language / semantic search.
 
+## Public AI fallback implementation status (2026-07-19)
+
+Issue `#39` is in progress on branch `issue-39-public-ai-fallback`:
+
+- Adds `IPublicAiCategorizer` and `PublicAiCategorizer` for Gemini/OpenAI HTTP calls.
+- Categorization order becomes Ollama first, then public AI only when automation policy enables
+  fallback, then keyword/TF-IDF.
+- `transcriptCloudPolicy=never` sends title/description metadata only; no transcripts are sent.
+- Cloud suggestions save `TagSource.Gemini` or `TagSource.OpenAI` plus nullable provider/model
+  audit metadata on `video_tags`.
+- NAS env keys are configured through `PublicAI__GeminiApiKey` and `PublicAI__OpenAIApiKey`.
+- Local verification so far: full `.NET` test suite passes, and frontend tests/lint/build pass.
+
 ## Gotcha: NEXT_PUBLIC_API_URL is baked at web BUILD time
 - The browser's API base = `NEXT_PUBLIC_API_URL`, baked into the pm-web bundle during
   `npm run build` (see [api-client.ts](src/web/src/lib/api-client.ts) — browser branch has

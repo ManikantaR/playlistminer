@@ -6,6 +6,8 @@ public class VideoTag
     public int TagId { get; set; }
     public TagSource Source { get; set; }
     public float? Confidence { get; set; }
+    public string? Provider { get; set; }
+    public string? ProviderModel { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public Video Video { get; set; } = null!;

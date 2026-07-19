@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using PlaylistMiner.Core.Categorization;
+using PlaylistMiner.Core.DTOs;
 using PlaylistMiner.Core.Interfaces;
 using PlaylistMiner.Core.Models;
 using PlaylistMiner.Infrastructure.Categorization;
@@ -47,6 +48,8 @@ public class CategorizationPipelineTests
         IKeywordMatcher? keyword = null,
         ITfIdfScorer? tfidf = null,
         IOllamaCategorizer? ollama = null,
+        IPublicAiCategorizer? publicAi = null,
+        IAutomationPolicyService? automationPolicy = null,
         CategorizationOptions? options = null)
     {
         var keywordMock = keyword ?? Mock.Of<IKeywordMatcher>(m =>
@@ -55,16 +58,41 @@ public class CategorizationPipelineTests
             m.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()) == Task.FromResult(new List<TagSuggestion>()));
         var ollamaMock = ollama ?? Mock.Of<IOllamaCategorizer>(m =>
             m.IsAvailableAsync(It.IsAny<CancellationToken>()) == Task.FromResult(false));
+        var publicAiMock = publicAi ?? Mock.Of<IPublicAiCategorizer>();
+        var automationPolicyMock = automationPolicy ?? Mock.Of<IAutomationPolicyService>(m =>
+            m.GetPolicyAsync(It.IsAny<CancellationToken>()) == Task.FromResult(MakePolicy(publicAiFallbackEnabled: false)));
 
         return new CategorizationPipeline(
             keywordMock,
             tfidfMock,
             ollamaMock,
+            publicAiMock,
+            automationPolicyMock,
             db,
             new PipelineRunTracker(db),
             Options.Create(options ?? new CategorizationOptions()),
             NullLogger<CategorizationPipeline>.Instance);
     }
+
+    private static AutomationPolicyDto MakePolicy(
+        bool publicAiFallbackEnabled,
+        string? publicAiProvider = null,
+        string? publicAiModel = null,
+        string transcriptCloudPolicy = "never") =>
+        new(
+            Mode: "aggressive_with_undo",
+            HighConfidenceThreshold: 0.9f,
+            ReviewThreshold: 0.65f,
+            DailyMoveBudget: 80,
+            NightlyRestoreBudget: 150,
+            CleanupRecommendationCount: 5,
+            OffPeakWindowStart: "23:00",
+            OffPeakWindowEnd: "05:00",
+            PublicAiFallbackEnabled: publicAiFallbackEnabled,
+            PublicAiProvider: publicAiProvider,
+            PublicAiModel: publicAiModel,
+            TranscriptCloudPolicy: transcriptCloudPolicy,
+            IsPaused: false);
 
     [Fact]
     public async Task Test_ClassifyAsync_UsesOllamaFirstWhenReachable()
@@ -104,6 +132,43 @@ public class CategorizationPipelineTests
     }
 
     [Fact]
+    public async Task Test_ClassifyAsync_WhenOllamaReachable_DoesNotCallPublicAiFallback()
+    {
+        // Arrange
+        using var db = CreateDb();
+        db.Tags.Add(MakeTag(1, "React"));
+        db.Videos.Add(MakeVideo(1));
+        await db.SaveChangesAsync();
+
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        ollamaMock.Setup(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TagSuggestion(0, "React", 0.91f, TagSource.Ollama)]);
+
+        var publicAiMock = new Mock<IPublicAiCategorizer>();
+        var policyMock = new Mock<IAutomationPolicyService>();
+        policyMock.Setup(p => p.GetPolicyAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(MakePolicy(true, "gemini", "gemini-3.1-flash-lite"));
+
+        var pipeline = CreatePipeline(
+            db,
+            ollama: ollamaMock.Object,
+            publicAi: publicAiMock.Object,
+            automationPolicy: policyMock.Object);
+
+        // Act
+        var result = await pipeline.ClassifyAsync(1);
+
+        // Assert
+        result.Should().ContainSingle(s => s.Source == TagSource.Ollama);
+        publicAiMock.Verify(p => p.CategorizeAsync(
+            It.IsAny<VideoContext>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<AutomationPolicyDto>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Test_ClassifyAsync_FallsBackWhenOllamaUnavailable()
     {
         // Arrange
@@ -134,6 +199,92 @@ public class CategorizationPipelineTests
         ollamaMock.Verify(o => o.CategorizeAsync(It.IsAny<VideoContext>(), It.IsAny<IEnumerable<string>>(), It.IsAny<CancellationToken>()), Times.Never);
         keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
         tfidfMock.Verify(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Test_ClassifyAsync_WhenOllamaUnavailableAndPublicAiEnabled_UsesConfiguredProviderBeforeLocalFallback()
+    {
+        // Arrange
+        using var db = CreateDb();
+        db.Tags.Add(MakeTag(1, "React"));
+        db.Videos.Add(MakeVideo(1, "React agents", "Use hooks and agents"));
+        await db.SaveChangesAsync();
+
+        var keywordMock = new Mock<IKeywordMatcher>();
+        var tfidfMock = new Mock<ITfIdfScorer>();
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var policy = MakePolicy(true, "gemini", "gemini-3.1-flash-lite");
+        var policyMock = new Mock<IAutomationPolicyService>();
+        policyMock.Setup(p => p.GetPolicyAsync(It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+
+        var publicAiMock = new Mock<IPublicAiCategorizer>();
+        publicAiMock.Setup(p => p.CategorizeAsync(
+                It.IsAny<VideoContext>(),
+                It.IsAny<IEnumerable<string>>(),
+                policy,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TagSuggestion(0, "React", 0.88f, TagSource.Gemini, "gemini", "gemini-3.1-flash-lite")]);
+
+        var pipeline = CreatePipeline(
+            db,
+            keyword: keywordMock.Object,
+            tfidf: tfidfMock.Object,
+            ollama: ollamaMock.Object,
+            publicAi: publicAiMock.Object,
+            automationPolicy: policyMock.Object);
+
+        // Act
+        var result = await pipeline.ClassifyAsync(1);
+
+        // Assert
+        result.Should().ContainSingle();
+        result[0].Source.Should().Be(TagSource.Gemini);
+        result[0].Provider.Should().Be("gemini");
+        result[0].ProviderModel.Should().Be("gemini-3.1-flash-lite");
+        keywordMock.Verify(k => k.MatchAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Never);
+        tfidfMock.Verify(t => t.ScoreAsync(It.IsAny<VideoContext>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Test_CategorizeAsync_WhenPublicAiFallbackTagsVideo_SavesProviderAuditMetadata()
+    {
+        // Arrange
+        using var db = CreateDb();
+        db.Tags.Add(MakeTag(1, "React"));
+        db.Videos.Add(MakeVideo(1, "React agents", "Use hooks and agents"));
+        await db.SaveChangesAsync();
+
+        var ollamaMock = new Mock<IOllamaCategorizer>();
+        ollamaMock.Setup(o => o.IsAvailableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var policy = MakePolicy(true, "gemini", "gemini-3.1-flash-lite");
+        var policyMock = new Mock<IAutomationPolicyService>();
+        policyMock.Setup(p => p.GetPolicyAsync(It.IsAny<CancellationToken>())).ReturnsAsync(policy);
+
+        var publicAiMock = new Mock<IPublicAiCategorizer>();
+        publicAiMock.Setup(p => p.CategorizeAsync(
+                It.IsAny<VideoContext>(),
+                It.IsAny<IEnumerable<string>>(),
+                policy,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new TagSuggestion(0, "React", 0.88f, TagSource.Gemini, "gemini", "gemini-3.1-flash-lite")]);
+
+        var pipeline = CreatePipeline(
+            db,
+            ollama: ollamaMock.Object,
+            publicAi: publicAiMock.Object,
+            automationPolicy: policyMock.Object);
+
+        // Act
+        await pipeline.CategorizeAsync(1);
+
+        // Assert
+        var saved = await db.VideoTags.SingleAsync();
+        saved.Source.Should().Be(TagSource.Gemini);
+        saved.Provider.Should().Be("gemini");
+        saved.ProviderModel.Should().Be("gemini-3.1-flash-lite");
     }
 
     [Fact]

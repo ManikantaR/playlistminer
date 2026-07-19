@@ -12,6 +12,8 @@ public class CategorizationPipeline(
     IKeywordMatcher keywordMatcher,
     ITfIdfScorer tfIdfScorer,
     IOllamaCategorizer ollamaCategorizer,
+    IPublicAiCategorizer publicAiCategorizer,
+    IAutomationPolicyService automationPolicyService,
     PlaylistMinerDbContext db,
     IPipelineRunTracker tracker,
     IOptions<CategorizationOptions> options,
@@ -78,6 +80,8 @@ public class CategorizationPipeline(
                 TagId = s.TagId,
                 Source = s.Source,
                 Confidence = s.Confidence,
+                Provider = s.Provider,
+                ProviderModel = s.ProviderModel,
                 CreatedAt = DateTime.UtcNow
             })
             .ToList();
@@ -265,7 +269,44 @@ public class CategorizationPipeline(
         }
         else
         {
-            logger.LogWarning("Ollama unavailable for video {VideoId}; falling back to keyword/TF-IDF.", video.Id);
+            logger.LogWarning("Ollama unavailable for video {VideoId}.", video.Id);
+            var policy = await automationPolicyService.GetPolicyAsync(ct);
+
+            if (policy.PublicAiFallbackEnabled)
+            {
+                if (runId is not null)
+                {
+                    await tracker.UpdateRunAsync(
+                        runId,
+                        _ => { },
+                        phase: "public_ai_classification",
+                        message: $"Running {policy.PublicAiProvider} classification for video {video.Id}...",
+                        ct: ct);
+                }
+
+                var publicAiSuggestions = await publicAiCategorizer.CategorizeAsync(context, allTags.Select(t => t.Name), policy, ct);
+                var resolved = publicAiSuggestions
+                    .Where(s => tagByName.TryGetValue(s.TagName, out _))
+                    .Select(s => s with { TagId = tagByName[s.TagName].Id })
+                    .OrderByDescending(s => s.Confidence)
+                    .ThenBy(s => s.TagName, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (resolved.Count > 0)
+                {
+                    return resolved;
+                }
+
+                logger.LogWarning(
+                    "Public AI returned no usable classifications for video {VideoId}; falling back to keyword/TF-IDF.",
+                    video.Id);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Public AI fallback disabled for video {VideoId}; falling back to keyword/TF-IDF.",
+                    video.Id);
+            }
         }
 
         if (runId is not null)

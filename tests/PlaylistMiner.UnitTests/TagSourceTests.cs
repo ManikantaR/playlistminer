@@ -14,6 +14,8 @@ public class TagSourceTests
             TagSource.RuleBased,
             TagSource.TfIdf,
             TagSource.Ollama,
+            TagSource.Gemini,
+            TagSource.OpenAI,
             TagSource.Suggested
         ]);
     }
