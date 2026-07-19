@@ -9,4 +9,10 @@ public interface IPlaylistRestoreService
         int targetPlaylistId,
         int maxCount,
         CancellationToken ct = default);
+
+    Task<PlaylistRestoreResultDto> RestoreBatchAsync(
+        int sourcePlaylistId,
+        int targetPlaylistId,
+        int maxCount,
+        CancellationToken ct = default);
 }

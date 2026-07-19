@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PlaylistMiner.Core.Interfaces;
+using PlaylistMiner.Core.Models;
 
 namespace PlaylistMiner.Worker;
 
@@ -32,7 +33,7 @@ public class OperationQueueHostedService(
                         operation.Id,
                         operation.Type);
 
-                    var runId = await ExecuteOperationAsync(scope.ServiceProvider, operation.Type, stoppingToken);
+                    var runId = await ExecuteOperationAsync(scope.ServiceProvider, operation, stoppingToken);
                     await queue.MarkCompletedAsync(operation.Id, runId, stoppingToken);
                 }
                 catch (Exception ex)
@@ -58,12 +59,12 @@ public class OperationQueueHostedService(
         }
     }
 
-    private static async Task<string?> ExecuteOperationAsync(
+    public static async Task<string?> ExecuteOperationAsync(
         IServiceProvider services,
-        string operationType,
+        OperationRequest operation,
         CancellationToken ct)
     {
-        switch (operationType)
+        switch (operation.Type)
         {
             case "full_sync":
                 await services.GetRequiredService<ISyncService>().FullSyncAsync(ct);
@@ -80,8 +81,25 @@ public class OperationQueueHostedService(
             case "organize_execute":
                 var result = await services.GetRequiredService<IOrganizeExecutorService>().ExecuteAsync(ct);
                 return result.RunId;
+            case "playlist_restore":
+                var restoreResult = await services.GetRequiredService<IPlaylistRestoreService>().RestoreBatchAsync(
+                    ParsePlaylistId(operation.Source, "source"),
+                    ParsePlaylistId(operation.Target, "target"),
+                    operation.MaxItems ?? 150,
+                    ct);
+                return $"playlist_restore:{restoreResult.AddedCount}";
             default:
-                throw new InvalidOperationException($"Unsupported operation type '{operationType}'.");
+                throw new InvalidOperationException($"Unsupported operation type '{operation.Type}'.");
         }
+    }
+
+    private static int ParsePlaylistId(string? value, string name)
+    {
+        if (!int.TryParse(value, out var playlistId) || playlistId <= 0)
+        {
+            throw new InvalidOperationException($"Playlist restore operation has an invalid {name} playlist id.");
+        }
+
+        return playlistId;
     }
 }

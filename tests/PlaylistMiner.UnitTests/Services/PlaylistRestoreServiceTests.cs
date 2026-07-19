@@ -58,6 +58,43 @@ public class PlaylistRestoreServiceTests
         ytMock.VerifyAll();
     }
 
+    [Fact]
+    public async Task Test_RestoreBatch_AllowsNightlyRestoreBudget()
+    {
+        using var db = CreateDb();
+        SeedRestoreData(db);
+
+        var ytMock = new Mock<IYouTubeApiClient>(MockBehavior.Strict);
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "yt-first", 11, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("pli-first");
+        ytMock.Setup(y => y.AddVideoToPlaylistAsync("PLtarget", "yt-third", 12, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("pli-third");
+
+        var service = CreateService(db, ytMock);
+
+        var result = await service.RestoreBatchAsync(1, 2, 150);
+
+        result.RequestedCount.Should().Be(150);
+        result.AddedCount.Should().Be(2);
+        result.SkippedCount.Should().Be(1);
+        result.Added.Select(i => i.YouTubeId).Should().Equal("yt-first", "yt-third");
+
+        ytMock.VerifyAll();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(501)]
+    public async Task Test_RestoreBatch_WhenBatchSizeUnsafe_ThrowsArgumentOutOfRangeException(int maxCount)
+    {
+        using var db = CreateDb();
+        var service = CreateService(db);
+
+        await service.Invoking(s => s.RestoreBatchAsync(1, 2, maxCount))
+            .Should().ThrowAsync<ArgumentOutOfRangeException>()
+            .WithMessage("*between 1 and 500*");
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(26)]

@@ -14,7 +14,8 @@ public class OperationQueueService(PlaylistMinerDbContext db) : IOperationQueueS
         "inbox_sync",
         "process_now",
         "categorize",
-        "organize_execute"
+        "organize_execute",
+        "playlist_restore"
     };
 
     public async Task<OperationRequestDto> QueueAsync(
@@ -147,6 +148,24 @@ public class OperationQueueService(PlaylistMinerDbContext db) : IOperationQueueS
         if (request.QuotaEstimate is < 0)
         {
             throw new ArgumentException("Quota estimate cannot be negative.", nameof(request));
+        }
+
+        if (NormalizeType(request.Type) == "playlist_restore")
+        {
+            if (!int.TryParse(request.Source, out var sourcePlaylistId) || sourcePlaylistId <= 0)
+            {
+                throw new ArgumentException("Playlist restore requires a positive source playlist id.", nameof(request));
+            }
+
+            if (!int.TryParse(request.Target, out var targetPlaylistId) || targetPlaylistId <= 0)
+            {
+                throw new ArgumentException("Playlist restore requires a positive target playlist id.", nameof(request));
+            }
+
+            if (request.MaxItems is > 500)
+            {
+                throw new ArgumentException("Playlist restore max items must be 500 or less.", nameof(request));
+            }
         }
 
         _ = NormalizeWindow(request.AllowedWindowStart);

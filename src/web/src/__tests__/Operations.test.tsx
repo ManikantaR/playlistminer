@@ -359,6 +359,34 @@ describe('OperationsPage', () => {
     });
   });
 
+  it('queues the AI Skills restore as an off-peak operation', () => {
+    const mutateAsync = jest.fn();
+    mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));
+    mockUsePipelineHistory.mockReturnValue(makeQueryResult([]));
+    mockUsePipelineHealth.mockReturnValue(makeQueryResult(sampleHealth));
+    mockUsePipelineEvents.mockReturnValue(makeQueryResult([]));
+    mockUseQueueOperation.mockReturnValue({
+      mutateAsync,
+      data: undefined,
+      isPending: false,
+    } as ReturnType<typeof useQueueOperation>);
+
+    render(<OperationsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /queue ai skills restore/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      type: 'playlist_restore',
+      source: '6',
+      target: '409',
+      maxItems: 150,
+      quotaEstimate: 150,
+      notBefore: null,
+      allowedWindowStart: '23:00',
+      allowedWindowEnd: '05:00',
+    });
+  });
+
   it('cancels queued operation from operation queue', () => {
     const mutateAsync = jest.fn();
     mockUsePipelineStatus.mockReturnValue(makeQueryResult<any>(null));

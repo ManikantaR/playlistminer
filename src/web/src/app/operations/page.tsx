@@ -164,6 +164,19 @@ export default function OperationsPage() {
     });
   };
 
+  const queueAiSkillsRestore = async () => {
+    await queueOperation.mutateAsync({
+      type: 'playlist_restore',
+      source: '6',
+      target: '409',
+      maxItems: 150,
+      quotaEstimate: 150,
+      notBefore: null,
+      allowedWindowStart: '23:00',
+      allowedWindowEnd: '05:00',
+    });
+  };
+
   const cancelQueuedOperation = async (operationId: number) => {
     await cancelOperation.mutateAsync(operationId);
   };
@@ -685,9 +698,14 @@ export default function OperationsPage() {
               Durable staged work for off-peak sync, organize, restore, cleanup, and reclassification jobs.
             </p>
           </div>
-          <Button onClick={queueFullSync} disabled={queueOperation.isPending}>
-            {queueOperation.isPending ? 'Queueing...' : 'Queue Full Sync'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={queueAiSkillsRestore} disabled={queueOperation.isPending} variant="secondary">
+              Queue AI Skills Restore
+            </Button>
+            <Button onClick={queueFullSync} disabled={queueOperation.isPending}>
+              {queueOperation.isPending ? 'Queueing...' : 'Queue Full Sync'}
+            </Button>
+          </div>
         </div>
 
         {!operationQueue ? (
