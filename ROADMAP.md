@@ -170,9 +170,9 @@ Facts:
 
 Plan:
 
-- Convert restore-sample into queued restore job. Current branch implements `playlist_restore`
-  queue support, worker execution via `RestoreBatchAsync`, and a `/operations` button that
-  stages the known old->new `AI Skills` restore for the off-peak window.
+- Convert restore-sample into queued restore job. PR #51 implemented `playlist_restore` queue
+  support, worker execution via `RestoreBatchAsync`, and a `/operations` button that stages the
+  known old->new `AI Skills` restore for the off-peak window; merged and deployed on 2026-07-18.
 - Run nightly after quota reset, preferably after midnight Pacific Time; operational local
   window remains `23:00-05:00`.
 - Use budget around `120-150` adds/night unless quota pressure says otherwise.

@@ -119,13 +119,19 @@ What was done:
 Next restore direction:
 
 - Do not run full restore interactively.
-- Current branch converts restore into a queued off-peak background job:
+- PR #51 converted restore into a queued off-peak background job and was deployed on
+  2026-07-18:
   - operation type: `playlist_restore`
   - source: `6`
   - target: `409`
   - batch size/quota estimate: `150`
   - allowed window: `23:00-05:00`
   - UI trigger: `/operations` -> `Queue AI Skills Restore`
+- Deployment verification after PR #51:
+  - route verifier: `https://playlistminer.home.manikantar.com` returned `200`
+  - API health: `{"status":"healthy","db":"up"}`
+  - live operation queue: `[]`
+  - containers: `pm-web` up, `pm-worker` up, `pm-api` healthy, `pm-db` healthy
 - Use nightly batches, roughly `120-150` adds/night unless quota pressure says otherwise.
 - Prefer after YouTube daily quota reset at midnight Pacific Time; operational local window
   remains `23:00-05:00`.
