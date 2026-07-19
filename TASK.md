@@ -37,8 +37,10 @@ agent. See [ROADMAP.md](ROADMAP.md) for the long-form product plan.
 - [x] **#8 Process now + reachability** — `POST /api/agent/process-now`, UI button, and
   clean Ollama-unavailable skip shipped in PR #47; merged and deployed on 2026-07-18.
   Optional cloud fallback remains separate work in #39.
-- [ ] #35 **Background operation queue** — durable queued/scheduled/running/completed/failed
-  jobs for sync, restore, cleanup, organize, reclassify, weekly synthesis.
+- [~] #35 **Background operation queue** — foundation shipped in PR #49 and deployed on
+  2026-07-18: persistent `operation_requests`, queue/list/detail/cancel API, worker poller,
+  and Operations UI panel. Remaining: job-specific checkpoint payloads for restore/cleanup,
+  richer detail UI, resume semantics per workflow, and Telegram notifications.
 - [ ] #36 **Full `AI Skills` restore as a nightly job** — source old playlist id `6`, target new
   playlist id `409`; sample restore already added 5 videos on 2026-07-18.
 - [ ] #37 **First-week approval queue** — backend-backed high-confidence action queue with UI

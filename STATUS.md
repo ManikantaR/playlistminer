@@ -22,18 +22,39 @@ _Last updated: 2026-07-18_
 ## Latest live snapshot (2026-07-18)
 
 - Repo: clean on `main...origin/main`
-- Latest merged PR: `#47` — **Add process-now reachability flow**
+- Latest merged PR: `#49` — **Add operation queue foundation**
 - No open PRs at time of audit.
-- CI for PR `#47`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
-- NAS deploy after PR `#47`: completed; route verifier returned
+- CI for PR `#49`: .NET, frontend, Playwright E2E, C# analysis, JS/TS analysis, and CodeQL all passed.
+- NAS deploy after PR `#49`: completed; route verifier returned
   `https://playlistminer.home.manikantar.com -> 200`.
 - Live `/api/health` after deploy returned `{"status":"healthy","db":"up"}`.
+- Live `GET /api/operations/queue` after deploy returned `[]`.
 - Pipeline health after deploy:
   - database healthy
   - OAuth connected
   - YouTube quota available
   - Ollama reachable
   - worker healthy
+
+## Operation queue status (2026-07-18)
+
+PR `#49` shipped the first durable background queue foundation for issue `#35`:
+
+- New `operation_requests` table with queued/scheduled/running/completed/deferred/failed/canceled
+  states plus source, target, max items, quota estimate, not-before, execution window, run id,
+  timestamps, and error fields.
+- New API:
+  - `GET /api/operations/queue`
+  - `GET /api/operations/queue/{id}`
+  - `POST /api/operations/queue`
+  - `POST /api/operations/queue/{id}/cancel`
+- New worker poller executes queued `full_sync`, `inbox_sync`, `process_now`, `categorize`, and
+  `organize_execute` operations, and records completion/failure back to the queue.
+- `/operations` now shows an **Operation Queue** panel with the current queue, status/error
+  display, cancel for queued/scheduled/deferred jobs, and a first **Queue Full Sync** action.
+- Issue `#35` remains open. Remaining work: restore/cleanup-specific checkpoint payloads,
+  resume behavior per heavy workflow, richer queue detail UI, Telegram/digest integration, and
+  moving more ad hoc trigger endpoints onto the queue.
 
 ## Process now / Ollama reachability status (2026-07-18)
 
