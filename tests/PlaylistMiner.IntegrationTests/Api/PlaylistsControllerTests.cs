@@ -190,4 +190,38 @@ public class PlaylistsControllerTests
         result!.AddedCount.Should().Be(1);
         result.Added.Should().ContainSingle(i => i.YouTubeId == "qNq4GDZ0-VU");
     }
+
+    [Fact]
+    public async Task Test_GetRestoreStatus_Returns200_WithCounts()
+    {
+        var mockRepo = new Mock<IPlaylistRepository>();
+        var mockOrganizer = new Mock<IPlaylistOrganizer>();
+        var mockRestore = new Mock<IPlaylistRestoreService>();
+        mockRestore.Setup(s => s.GetStatusAsync(6, 409, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlaylistRestoreStatusDto(
+                SourcePlaylistId: 6,
+                TargetPlaylistId: 409,
+                SourcePlaylistName: "AI Skills",
+                TargetPlaylistName: "AI skills",
+                SourceTotalCount: 1246,
+                TargetTotalCount: 71,
+                AlreadyPresentCount: 0,
+                RemainingCount: 1246));
+
+        using var factory = new PlaylistMinerWebAppFactory(services =>
+        {
+            services.AddSingleton(mockRepo.Object);
+            services.AddSingleton(mockOrganizer.Object);
+            services.AddSingleton(mockRestore.Object);
+        });
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/playlists/409/restore-status?sourcePlaylistId=6");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await response.Content.ReadFromJsonAsync<PlaylistRestoreStatusDto>();
+        status.Should().NotBeNull();
+        status!.RemainingCount.Should().Be(1246);
+        status.TargetTotalCount.Should().Be(71);
+    }
 }

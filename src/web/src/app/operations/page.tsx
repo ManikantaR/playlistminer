@@ -11,7 +11,7 @@ import {
 } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
-import { useCancelOperation, useOperationQueue, useOperationsActivity, useOperationsQuota, useQueueOperation } from '@/hooks/useOperations';
+import { useCancelOperation, useOperationQueue, useOperationsActivity, useOperationsQuota, useQueueOperation, useRestoreStatus } from '@/hooks/useOperations';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -36,6 +36,8 @@ import type { RemoteDuplicateCleanupItem } from '@/types';
 
 const MAX_REMOTE_CLEANUP_REMOVALS_PER_RUN = 25;
 const DEFAULT_REMOTE_CLEANUP_BATCH_SIZE = 5;
+const AI_SKILLS_SOURCE_PLAYLIST_ID = 6;
+const AI_SKILLS_TARGET_PLAYLIST_ID = 409;
 
 // Renders a dependency-health pill. Critically, when `loaded` is false (the health fetch
 // hasn't succeeded yet — e.g. first load during an API restart) it shows a neutral
@@ -100,6 +102,10 @@ export default function OperationsPage() {
   const { data: activityFeed, refetch: refetchActivity } = useOperationsActivity(activityLimit, activityOffset);
   const { data: operationsQuota, isLoading: isOperationsQuotaLoading, refetch: refetchOperationsQuota } = useOperationsQuota();
   const { data: operationQueue, refetch: refetchOperationQueue } = useOperationQueue();
+  const { data: restoreStatus, refetch: refetchRestoreStatus } = useRestoreStatus(
+    AI_SKILLS_SOURCE_PLAYLIST_ID,
+    AI_SKILLS_TARGET_PLAYLIST_ID
+  );
   const queueOperation = useQueueOperation();
   const cancelOperation = useCancelOperation();
   const { data: duplicates } = useDuplicateReview();
@@ -148,6 +154,7 @@ export default function OperationsPage() {
     refetchActivity();
     refetchOperationsQuota();
     refetchOperationQueue();
+    refetchRestoreStatus();
     if (selectedRunId) refetchEvents();
   };
 
@@ -167,8 +174,8 @@ export default function OperationsPage() {
   const queueAiSkillsRestore = async () => {
     await queueOperation.mutateAsync({
       type: 'playlist_restore',
-      source: '6',
-      target: '409',
+      source: String(AI_SKILLS_SOURCE_PLAYLIST_ID),
+      target: String(AI_SKILLS_TARGET_PLAYLIST_ID),
       maxItems: 150,
       quotaEstimate: 150,
       notBefore: null,
@@ -705,6 +712,24 @@ export default function OperationsPage() {
             <Button onClick={queueFullSync} disabled={queueOperation.isPending}>
               {queueOperation.isPending ? 'Queueing...' : 'Queue Full Sync'}
             </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">AI Skills restore</h3>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {restoreStatus
+                  ? `${restoreStatus.remainingCount.toLocaleString()} remaining · ${restoreStatus.targetTotalCount.toLocaleString()} in target · ${restoreStatus.alreadyPresentCount.toLocaleString()} already present`
+                  : 'Checking restore status...'}
+              </p>
+            </div>
+            {restoreStatus && (
+              <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                {restoreStatus.sourcePlaylistName} -&gt; {restoreStatus.targetPlaylistName}
+              </span>
+            )}
           </div>
         </div>
 

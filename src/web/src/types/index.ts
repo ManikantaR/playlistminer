@@ -290,6 +290,17 @@ export interface OperationsQuota {
   message: string;
 }
 
+export interface PlaylistRestoreStatus {
+  sourcePlaylistId: number;
+  targetPlaylistId: number;
+  sourcePlaylistName: string;
+  targetPlaylistName: string;
+  sourceTotalCount: number;
+  targetTotalCount: number;
+  alreadyPresentCount: number;
+  remainingCount: number;
+}
+
 export interface OperationRequest {
   id: number;
   type: string;
