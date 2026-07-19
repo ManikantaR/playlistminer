@@ -22,6 +22,25 @@ public class PlaylistRestoreServiceTests
     }
 
     [Fact]
+    public async Task Test_GetStatus_ReturnsRemainingRestoreCounts()
+    {
+        using var db = CreateDb();
+        SeedRestoreData(db);
+        var service = CreateService(db);
+
+        var status = await service.GetStatusAsync(1, 2);
+
+        status.SourcePlaylistId.Should().Be(1);
+        status.TargetPlaylistId.Should().Be(2);
+        status.SourcePlaylistName.Should().Be("Deleted AI Skills");
+        status.TargetPlaylistName.Should().Be("AI skills");
+        status.SourceTotalCount.Should().Be(3);
+        status.TargetTotalCount.Should().Be(1);
+        status.AlreadyPresentCount.Should().Be(1);
+        status.RemainingCount.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Test_RestoreSample_AddsMissingVideosToTargetPlaylistInSourceOrder()
     {
         using var db = CreateDb();

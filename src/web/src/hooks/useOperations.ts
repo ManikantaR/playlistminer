@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '@/lib/api-client';
-import type { CreateOperationRequest, OperationRequest, OperationsActivityFeed, OperationsQuota } from '@/types';
+import type { CreateOperationRequest, OperationRequest, OperationsActivityFeed, OperationsQuota, PlaylistRestoreStatus } from '@/types';
 
 export function useOperationsActivity(limit = 10, offset = 0) {
   return useQuery({
@@ -22,6 +22,16 @@ export function useOperationQueue() {
   return useQuery({
     queryKey: ['operationQueue'],
     queryFn: () => apiGet<OperationRequest[]>('/api/operations/queue'),
+    refetchInterval: 10000,
+  });
+}
+
+export function useRestoreStatus(sourcePlaylistId: number, targetPlaylistId: number) {
+  return useQuery({
+    queryKey: ['restoreStatus', sourcePlaylistId, targetPlaylistId],
+    queryFn: () => apiGet<PlaylistRestoreStatus>(
+      `/api/playlists/${targetPlaylistId}/restore-status?sourcePlaylistId=${sourcePlaylistId}`
+    ),
     refetchInterval: 10000,
   });
 }

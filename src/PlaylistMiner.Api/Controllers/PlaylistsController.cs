@@ -115,4 +115,27 @@ public class PlaylistsController(
             });
         }
     }
+
+    [HttpGet("{targetPlaylistId:int}/restore-status")]
+    [ProducesResponseType<PlaylistRestoreStatusDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRestoreStatusAsync(
+        int targetPlaylistId,
+        [FromQuery] int sourcePlaylistId,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var status = await playlistRestoreService.GetStatusAsync(sourcePlaylistId, targetPlaylistId, ct);
+            return Ok(status);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Playlist not found.",
+                Detail = ex.Message
+            });
+        }
+    }
 }

@@ -4,6 +4,11 @@ namespace PlaylistMiner.Core.Interfaces;
 
 public interface IPlaylistRestoreService
 {
+    Task<PlaylistRestoreStatusDto> GetStatusAsync(
+        int sourcePlaylistId,
+        int targetPlaylistId,
+        CancellationToken ct = default);
+
     Task<PlaylistRestoreResultDto> RestoreSampleAsync(
         int sourcePlaylistId,
         int targetPlaylistId,

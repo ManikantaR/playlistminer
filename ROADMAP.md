@@ -176,6 +176,9 @@ Plan:
 - Run nightly after quota reset, preferably after midnight Pacific Time; operational local
   window remains `23:00-05:00`.
 - Use budget around `120-150` adds/night unless quota pressure says otherwise.
+- Current branch adds restore status visibility: `GET /api/playlists/{target}/restore-status`
+  reports source total, target total, already-present count, and remaining count, and `/operations`
+  displays the known `AI Skills` restore status above the queue.
 - Save progress/checkpoint after each successful add.
 - Notify via Telegram after each batch:
   - added count

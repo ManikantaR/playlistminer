@@ -132,6 +132,10 @@ Next restore direction:
   - API health: `{"status":"healthy","db":"up"}`
   - live operation queue: `[]`
   - containers: `pm-web` up, `pm-worker` up, `pm-api` healthy, `pm-db` healthy
+- Current branch adds restore status visibility:
+  - API: `GET /api/playlists/409/restore-status?sourcePlaylistId=6`
+  - reports source total, target total, already-present count, and remaining count
+  - `/operations` shows an `AI Skills restore` summary above the queue
 - Use nightly batches, roughly `120-150` adds/night unless quota pressure says otherwise.
 - Prefer after YouTube daily quota reset at midnight Pacific Time; operational local window
   remains `23:00-05:00`.

@@ -16,8 +16,8 @@ import {
 } from '@/hooks/usePipeline';
 import { useDuplicateReview } from '@/hooks/useDuplicates';
 import { useBuildRemoteCleanupPlan, useExecuteRemoteCleanup } from '@/hooks/useRemoteCleanup';
-import { useCancelOperation, useOperationQueue, useOperationsActivity, useOperationsQuota, useQueueOperation } from '@/hooks/useOperations';
-import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult, OperationsActivityFeed, OperationsQuota, OperationRequest } from '@/types';
+import { useCancelOperation, useOperationQueue, useOperationsActivity, useOperationsQuota, useQueueOperation, useRestoreStatus } from '@/hooks/useOperations';
+import type { PipelineRun, PipelineEvent, DependencyHealth, OperationsHealth, DuplicateReview, RemoteDuplicateCleanupItem, RemoteDuplicateCleanupResult, OperationsActivityFeed, OperationsQuota, OperationRequest, PlaylistRestoreStatus } from '@/types';
 import OperationsPage from '../app/operations/page';
 
 const mockUsePipelineStatus = usePipelineStatus as jest.MockedFunction<typeof usePipelineStatus>;
@@ -34,6 +34,7 @@ const mockUseOperationsQuota = useOperationsQuota as jest.MockedFunction<typeof 
 const mockUseOperationQueue = useOperationQueue as jest.MockedFunction<typeof useOperationQueue>;
 const mockUseQueueOperation = useQueueOperation as jest.MockedFunction<typeof useQueueOperation>;
 const mockUseCancelOperation = useCancelOperation as jest.MockedFunction<typeof useCancelOperation>;
+const mockUseRestoreStatus = useRestoreStatus as jest.MockedFunction<typeof useRestoreStatus>;
 
 const makeQueryResult = <T,>(data: T) => ({
   data,
@@ -151,6 +152,17 @@ describe('OperationsPage', () => {
       error: 'Operation is outside allowed execution window.',
     },
   ];
+
+  const sampleRestoreStatus: PlaylistRestoreStatus = {
+    sourcePlaylistId: 6,
+    targetPlaylistId: 409,
+    sourcePlaylistName: 'AI Skills',
+    targetPlaylistName: 'AI skills',
+    sourceTotalCount: 1246,
+    targetTotalCount: 71,
+    alreadyPresentCount: 0,
+    remainingCount: 1246,
+  };
 
   const sampleActiveSyncRun: PipelineRun = {
     runId: 'sync-run-123',
@@ -277,6 +289,7 @@ describe('OperationsPage', () => {
     mockUseOperationsQuota.mockReturnValue(makeQueryResult(sampleOperationsQuota));
     mockUseOperationsActivity.mockReturnValue(makeQueryResult(sampleActivityFeed));
     mockUseOperationQueue.mockReturnValue(makeQueryResult(sampleOperationQueue));
+    mockUseRestoreStatus.mockReturnValue(makeQueryResult(sampleRestoreStatus));
     mockUseQueueOperation.mockReturnValue({
       mutateAsync: jest.fn(),
       data: undefined,
@@ -342,6 +355,9 @@ describe('OperationsPage', () => {
     render(<OperationsPage />);
 
     expect(screen.getByText('Operation Queue')).toBeInTheDocument();
+    expect(screen.getByText('AI Skills restore')).toBeInTheDocument();
+    expect(screen.getByText(/1,246 remaining/)).toBeInTheDocument();
+    expect(screen.getByText(/71 in target/)).toBeInTheDocument();
     expect(screen.getByText('full_sync')).toBeInTheDocument();
     expect(screen.getByText('deferred')).toBeInTheDocument();
 

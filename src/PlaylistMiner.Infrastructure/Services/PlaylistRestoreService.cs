@@ -17,6 +17,43 @@ public class PlaylistRestoreService(
     private const int MaxSafeBatchSize = 25;
     private const int MaxNightlyBatchSize = 500;
 
+    public async Task<PlaylistRestoreStatusDto> GetStatusAsync(
+        int sourcePlaylistId,
+        int targetPlaylistId,
+        CancellationToken ct = default)
+    {
+        var sourcePlaylist = await db.Playlists.FindAsync([sourcePlaylistId], ct)
+            ?? throw new KeyNotFoundException($"Source playlist {sourcePlaylistId} was not found.");
+
+        var targetPlaylist = await db.Playlists.FindAsync([targetPlaylistId], ct)
+            ?? throw new KeyNotFoundException($"Target playlist {targetPlaylistId} was not found.");
+
+        var sourceVideoIds = await db.PlaylistVideos
+            .AsNoTracking()
+            .Where(pv => pv.PlaylistId == sourcePlaylistId)
+            .Select(pv => pv.VideoId)
+            .ToListAsync(ct);
+
+        var targetVideoIds = await db.PlaylistVideos
+            .AsNoTracking()
+            .Where(pv => pv.PlaylistId == targetPlaylistId)
+            .Select(pv => pv.VideoId)
+            .ToListAsync(ct);
+
+        var targetVideoIdSet = targetVideoIds.ToHashSet();
+        var alreadyPresentCount = sourceVideoIds.Count(targetVideoIdSet.Contains);
+
+        return new PlaylistRestoreStatusDto(
+            sourcePlaylist.Id,
+            targetPlaylist.Id,
+            sourcePlaylist.Name,
+            targetPlaylist.Name,
+            sourceVideoIds.Count,
+            targetVideoIds.Count,
+            alreadyPresentCount,
+            sourceVideoIds.Count - alreadyPresentCount);
+    }
+
     public async Task<PlaylistRestoreResultDto> RestoreSampleAsync(
         int sourcePlaylistId,
         int targetPlaylistId,
