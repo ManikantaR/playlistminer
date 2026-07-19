@@ -27,6 +27,9 @@ services:
       YouTube__ClientSecret: ${YOUTUBE_CLIENT_SECRET}
       YouTube__EncryptionKey: ${YOUTUBE_ENCRYPTION_KEY}
       YouTube__RedirectUri: http://localhost:${API_PORT:-5000}/api/oauth/callback
+      Categorization__MaxVideosPerRun: ${CATEGORIZATION_MAX_VIDEOS_PER_RUN:-200}
+      PublicAI__GeminiApiKey: ${GEMINI_API_KEY:-}
+      PublicAI__OpenAIApiKey: ${OPENAI_API_KEY:-}
     depends_on:
       pm-db:
         condition: service_healthy
@@ -42,6 +45,9 @@ services:
       YouTube__ClientId: ${YOUTUBE_CLIENT_ID}
       YouTube__ClientSecret: ${YOUTUBE_CLIENT_SECRET}
       YouTube__EncryptionKey: ${YOUTUBE_ENCRYPTION_KEY}
+      Categorization__MaxVideosPerRun: ${CATEGORIZATION_MAX_VIDEOS_PER_RUN:-200}
+      PublicAI__GeminiApiKey: ${GEMINI_API_KEY:-}
+      PublicAI__OpenAIApiKey: ${OPENAI_API_KEY:-}
     depends_on:
       pm-db:
         condition: service_healthy

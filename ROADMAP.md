@@ -274,7 +274,9 @@ Current provider/key direction:
   - Gemini: `gemini-3.1-flash-lite`, then `gemini-3.5-flash` only if needed.
   - OpenAI: `gpt-5.6-luna`, then `gpt-5.6-terra` only if needed.
 - NAS env slots are `GEMINI_API_KEY` and `OPENAI_API_KEY`; values belong only in NAS secrets.
-- Public provider fallback implementation remains #39.
+- Current #39 branch wires provider fallback into categorization only after Ollama is unavailable,
+  stores cloud suggestions as `Gemini` or `OpenAI`, and persists nullable provider/model audit
+  fields on `video_tags`.
 
 ### 10. Transcript and Semantic Search
 

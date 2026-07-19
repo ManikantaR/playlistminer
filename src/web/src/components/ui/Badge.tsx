@@ -13,6 +13,8 @@ const sourceStyles: Record<TagSuggestion['source'], string> = {
   RuleBased: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900 dark:text-blue-200',
   TfIdf: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900 dark:text-purple-200',
   Ollama: 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900 dark:text-orange-200',
+  Gemini: 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900 dark:text-cyan-200',
+  OpenAI: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900 dark:text-emerald-200',
   Suggested: 'bg-gray-100 text-gray-700 border-gray-400 border-dashed dark:bg-gray-800 dark:text-gray-300',
 };
 

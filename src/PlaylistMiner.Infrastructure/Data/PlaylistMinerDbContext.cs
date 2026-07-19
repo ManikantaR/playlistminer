@@ -98,6 +98,8 @@ public class PlaylistMinerDbContext(DbContextOptions<PlaylistMinerDbContext> opt
             entity.Property(vt => vt.TagId).HasColumnName("tag_id");
             entity.Property(vt => vt.Source).HasColumnName("source").HasConversion<string>().IsRequired();
             entity.Property(vt => vt.Confidence).HasColumnName("confidence");
+            entity.Property(vt => vt.Provider).HasColumnName("provider").HasMaxLength(50);
+            entity.Property(vt => vt.ProviderModel).HasColumnName("provider_model").HasMaxLength(100);
             entity.Property(vt => vt.CreatedAt).HasColumnName("created_at").IsRequired();
 
             entity.HasOne(vt => vt.Video)

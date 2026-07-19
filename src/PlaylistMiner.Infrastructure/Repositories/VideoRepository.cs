@@ -81,7 +81,9 @@ public class VideoRepository(PlaylistMinerDbContext db) : IVideoRepository
                     vt.TagId,
                     vt.Tag.Name,
                     vt.Source,
-                    vt.Confidence)).ToList()))
+                    vt.Confidence,
+                    vt.Provider,
+                    vt.ProviderModel)).ToList()))
             .ToListAsync(ct);
 
         return new PagedResult<VideoDto>(items, totalCount, filter.Page, filter.PageSize, totalPages);
@@ -107,7 +109,9 @@ public class VideoRepository(PlaylistMinerDbContext db) : IVideoRepository
                     vt.TagId,
                     vt.Tag.Name,
                     vt.Source,
-                    vt.Confidence)).ToList(),
+                    vt.Confidence,
+                    vt.Provider,
+                    vt.ProviderModel)).ToList(),
                 v.PlaylistVideos.Select(pv => pv.Playlist.Name).ToList()))
             .FirstOrDefaultAsync(ct);
     }

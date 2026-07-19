@@ -31,6 +31,18 @@ describe('Badge', () => {
     expect(badge?.className).toMatch(/orange/);
   });
 
+  it('applies cyan color for Gemini source', () => {
+    render(<Badge label="Test" source="Gemini" />);
+    const badge = screen.getByText('Test').closest('span');
+    expect(badge?.className).toMatch(/cyan/);
+  });
+
+  it('applies emerald color for OpenAI source', () => {
+    render(<Badge label="Test" source="OpenAI" />);
+    const badge = screen.getByText('Test').closest('span');
+    expect(badge?.className).toMatch(/emerald/);
+  });
+
   it('applies dashed border for Suggested source', () => {
     render(<Badge label="Test" source="Suggested" />);
     const badge = screen.getByText('Test').closest('span');

@@ -92,17 +92,24 @@ public static class InfrastructureServiceExtensions
         services.AddMemoryCache();
         services.Configure<CategorizationOptions>(
             configuration.GetSection(CategorizationOptions.SectionName));
+        services.Configure<PublicAiOptions>(
+            configuration.GetSection(PublicAiOptions.SectionName));
 
         services.AddScoped<ITagRuleRepository, TagRuleRepository>();
         services.AddScoped<IKeywordMatcher, KeywordMatcher>();
         services.AddScoped<ITfIdfScorer, TfIdfScorer>();
         services.AddScoped<ICategorizationPipeline, CategorizationPipeline>();
+        services.AddScoped<IPublicAiCategorizer, PublicAiCategorizer>();
         services.AddScoped<ISelfLearningService, SelfLearningService>();
 
         services.AddHttpClient<IOllamaCategorizer, OllamaCategorizer>((sp, client) =>
         {
             var opts = sp.GetRequiredService<IOptions<CategorizationOptions>>().Value;
             client.BaseAddress = new Uri(opts.OllamaBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(35);
+        });
+        services.AddHttpClient<IPublicAiCategorizer, PublicAiCategorizer>(client =>
+        {
             client.Timeout = TimeSpan.FromSeconds(35);
         });
 
